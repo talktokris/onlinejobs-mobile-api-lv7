@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class RoleUser extends Model
 {
-    use HasFactory;
+    // Removed HasFactory trait - not available in Laravel 7
 
     protected $table= "role_user";
     protected $primaryKey= "role_id";

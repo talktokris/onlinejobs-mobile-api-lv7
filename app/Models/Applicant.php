@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Applicant extends Model
 {
-    use HasFactory;
+    // Removed HasFactory trait - not available in Laravel 7
 
     public function offer()
     {

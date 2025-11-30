@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class UserSkill extends Model
 {
-    use HasFactory;
+    // Removed HasFactory trait - not available in Laravel 7
 
     /**
      * Get all of the comments for the UserSkill

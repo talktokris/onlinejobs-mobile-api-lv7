@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Message extends Model
 {
-    use HasFactory;
+    // Removed HasFactory trait - not available in Laravel 7
     protected $fillable = [
         'user_id',
         'title',

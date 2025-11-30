@@ -171,11 +171,26 @@ class AuthAppController extends AuthBaseController
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
-            $findNumber =User::where([['phone','=', $request->mobile],['country_id','=',  $request->country_id],['otp','=',  $request->otp]])->count(); 
-        // return $findNumber;
+        
+        // Convert OTP to string to ensure proper comparison
+        $otp = (string) $request->otp;
+        $mobile = (string) $request->mobile;
+        $countryId = (int) $request->country_id;
+        
+        // First try exact match with country_id
+        $user = User::where('phone', $mobile)
+            ->where('country_id', $countryId)
+            ->where('otp', $otp)
+            ->first();
+        
+        // If not found, try without country_id check (in case country_id changed)
+        if (!$user) {
+            $user = User::where('phone', $mobile)
+                ->where('otp', $otp)
+                ->first();
+        }
 
-        if($findNumber>=1){ 
-            $user = User::where([['phone','=', $request->mobile],['country_id','=',  $request->country_id],['otp','=',  $request->otp]])->first();  
+        if($user){ 
             Auth::login($user); 
             // $user = Auth::user(); 
             $success['token'] =  $user->createToken('OnlineJobsToken')->plainTextToken; 

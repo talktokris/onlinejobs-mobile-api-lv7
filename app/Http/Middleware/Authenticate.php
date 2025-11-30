@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Auth\Middleware\Authenticate as Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Auth\AuthenticationException;
 
 class Authenticate extends Middleware
 {
@@ -14,8 +16,26 @@ class Authenticate extends Middleware
      */
     protected function redirectTo($request)
     {
-        if (! $request->expectsJson()) {
-            return route('login');
-        }
+        // Always return null to prevent redirect attempts
+        // This ensures API requests get JSON 401 responses instead of redirects
+        return null;
+    }
+    
+    /**
+     * Handle an unauthenticated user.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  array  $guards
+     * @return void
+     *
+     * @throws \Illuminate\Auth\AuthenticationException
+     */
+    protected function unauthenticated($request, array $guards)
+    {
+        // Always throw JSON exception for API requests
+        // This prevents the "Route [login] not defined" error
+        throw new AuthenticationException(
+            'Unauthenticated.', $guards, null
+        );
     }
 }

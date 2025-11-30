@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class PartTimeEmployer extends Model
 {
-    use HasFactory;
+    // Removed HasFactory trait - not available in Laravel 7
 
     protected $table = 'part_time_employer';
     protected $guarded = ['id'];

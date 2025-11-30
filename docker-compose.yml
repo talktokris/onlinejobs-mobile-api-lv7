@@ -14,7 +14,7 @@ services:
       - mysql
     ports:
       - "8000:8000"
-    command: tail -f /dev/null
+    command: sh -c "php artisan serve --host=0.0.0.0 --port=8000"
 
   mysql:
     image: mysql:5.7

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Job extends Model
 {
-    use HasFactory;
+    // Removed HasFactory trait - not available in Laravel 7
 
     protected $casts = [
         'closing_date' => 'datetime:d/m/Y'

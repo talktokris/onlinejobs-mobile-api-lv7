@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProfessionalExperience extends Model
 {
-    use HasFactory;
+    // Removed HasFactory trait - not available in Laravel 7
 
     /* --------------- Kris Code Start ---------*/
     public function country_name()
