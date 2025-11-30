@@ -199,7 +199,7 @@ class EmployerResumeController extends Controller
 
         })
 
-        ->whereHas('user_skills', function($q) use ($skillId,) {
+        ->whereHas('user_skills', function($q) use ($skillId) {
             $q->when($skillId, function($q) use ($skillId) {
                $q->where('skill_id', '=',   $skillId );
               
