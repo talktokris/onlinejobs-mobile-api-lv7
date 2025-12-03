@@ -193,7 +193,7 @@ Route::get('/field-options', [FieldOptionController::class, 'index'])->name('fie
 
 Route::get('/jobs', [JobController::class, 'index'])->name('jobs');
 
-Route::get('/jobs/{id}', [JobController::class, 'show'])->name('jobs-view');//completed
+Route::get('/jobs/{id}', [JobController::class, 'show'])->name('jobs-view'); //completed
 
 Route::get('/companies', [EmployerController::class, 'companies'])->name('companies');
 
