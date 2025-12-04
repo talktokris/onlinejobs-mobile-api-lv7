@@ -91,7 +91,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/job-listing', [JobsAppController::class,'joblist'])->name('postJoblist');
     Route::post('/job-search', [JobsAppController::class,'jobsearch'])->name('postJobsearch');
     Route::post('/job-apply', [JobsAppController::class,'jobApply'])->name('postJobApply');
+    Route::post('/revoke-job-apply', [JobsAppController::class,'revokeJobApply'])->name('postRevokeJobApply');
     Route::post('/job-bookmark', [JobsAppController::class,'jobBookmark'])->name('postJobBookmark');
+    Route::post('/remove-bookmark', [JobsAppController::class,'removeBookmark'])->name('postRemoveBookmark');
     Route::post('/job-bookmark-list', [JobsAppController::class,'jobBookmarkList'])->name('postJobBookmarkList');
     Route::post('/job-applied-list', [JobsAppController::class,'JobAppliedList'])->name('postJobAppliedList');
  

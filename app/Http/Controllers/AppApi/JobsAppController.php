@@ -20,9 +20,7 @@ use App\Http\Resources\JobBookmarkListResources;
 
 use App\Http\Controllers\AppApi\CommanMessageController;
 
-
-
-use Validator;
+use Illuminate\Support\Facades\Validator;
 
 class JobsAppController extends Controller
 {
@@ -253,6 +251,106 @@ class JobsAppController extends Controller
         return response()->json($response, 200);
 
         
+    }
+
+    public function revokeJobApply(Request $request)
+    {
+        $user_id = auth('sanctum')->user()->id;
+
+        $validator = Validator::make($request->all(), [
+            'job_id' => 'required|integer|min:1|max:999999999999999',
+        ]);
+
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $data = $request->all();
+        $job_id = $data['job_id'];
+
+        // Check if application exists
+        $application = JobApplicant::where([
+            ['job_id', '=', $job_id],
+            ['user_id', '=', $user_id],
+            ['delete_status', '=', 0]
+        ])->first();
+
+        if($application) {
+            // Update delete_status to 1 (soft delete)
+            $updateItem = JobApplicant::where([
+                ['job_id', '=', $job_id],
+                ['user_id', '=', $user_id]
+            ])->update(['delete_status' => 1]);
+
+            if($updateItem) {
+                $success = true;
+                $message = 'Job application revoked successfully';
+            } else {
+                $success = false;
+                $message = 'Unknown Error, Please Contact support';
+            }
+        } else {
+            $success = false;
+            $message = 'Job application not found';
+        }
+        
+        $response = [
+            'success' => $success,
+            'data' => $job_id,
+            'message' => $message,
+        ];
+        
+        return response()->json($response, 200);
+    }
+
+    public function removeBookmark(Request $request)
+    {
+        $user_id = auth('sanctum')->user()->id;
+
+        $validator = Validator::make($request->all(), [
+            'job_id' => 'required|integer|min:1|max:999999999999999',
+        ]);
+
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $data = $request->all();
+        $job_id = $data['job_id'];
+
+        // Check if bookmark exists
+        $bookmark = JobBookmark::where([
+            ['job_id', '=', $job_id],
+            ['user_id', '=', $user_id],
+            ['delete_status', '=', 0]
+        ])->first();
+
+        if($bookmark) {
+            // Update delete_status to 1 (soft delete)
+            $updateItem = JobBookmark::where([
+                ['job_id', '=', $job_id],
+                ['user_id', '=', $user_id]
+            ])->update(['delete_status' => 1]);
+
+            if($updateItem) {
+                $success = true;
+                $message = 'Bookmark removed successfully';
+            } else {
+                $success = false;
+                $message = 'Unknown Error, Please Contact support';
+            }
+        } else {
+            $success = false;
+            $message = 'Bookmark not found';
+        }
+        
+        $response = [
+            'success' => $success,
+            'data' => $job_id,
+            'message' => $message,
+        ];
+        
+        return response()->json($response, 200);
     }
 
     public function jobBookmarkList(Request $request)
