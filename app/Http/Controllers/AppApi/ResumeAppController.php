@@ -14,19 +14,38 @@ use App\Models\User;
 
 use DB;
 
-use Validator;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 use Intervention\Image\Facades\Image;
 
 class ResumeAppController extends Controller
 {
+    /**
+     * return error response.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function sendError($error, $errorMessages = [], $code = 404)
+    {
+        $response = [
+            'success' => false,
+            'data' => $errorMessages,
+            'message' => $error,
+        ];
 
+        if(!empty($errorMessages)){
+            $response['data'] = $errorMessages;
+        }
+
+        return response()->json($response, 200);
+    }
 
     public function personalInfoUpdate(Request $request){
 
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
+            'id' => 'required|integer|min:1|max:9999999999999',
             'name' => 'required|string|min:1|max:250',
             'last_name' => 'required|string|min:2|max:250',
             'date_of_birth' => 'required|string|min:2|max:20',
@@ -48,21 +67,28 @@ class ResumeAppController extends Controller
         
         if($foodVenderCount>=1){
 
+            // Update Profile table
+            $updateProfile = Profile::where('id', '=',$data['id'])->update([
+                'name'=> $data['name'],
+                'date_of_birth'=> $data['date_of_birth'],
+                'gender'=> $data['gender'],
+                'marital_status'=> $data['marital_status'],
+                'religion'=> $data['religion'],
+                'height'=> $data['height'],
+                'weight'=> $data['weight']
+            ]);
 
-            $updateItem = Profile::where('id', '=',$data['id'])->update(['name'=> $data['name'],'date_of_birth'=> $data['date_of_birth'],'gender'=> $data['gender'],'marital_status'=> $data['marital_status'],'religion'=> $data['religion'],'height'=> $data['height'],'weight'=> $data['weight']]);
+            // Update User table with firstName and lastName
+            $updateUser = User::where('id', '=', $user_id)->update([
+                'name'=> $data['name'],
+                'last_name'=> $data['last_name']
+            ]);
 
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else
-            {  
-                
-                $updateUser = User::where('id', '=',$user_id)->update(['name'=> $data['name'],'last_name'=> $data['last_name']]);
-                if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-                else{   $success=true; $get_id = $data['id']; $message='Personal Information updated successfully'; }
-            }
+            $success=true;
+            $get_id=$data['id'];
+            $message='Personal information updated successfully';
 
-        } 
-        else 
-        {
+        } else {
                 $success=false;
                 $get_id=$foodVenderCount;
                 $message='Unauthorized action'; 
@@ -78,35 +104,25 @@ class ResumeAppController extends Controller
     
     }
 
-
-
     public function contactInfoUpdate(Request $request){
 
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
-            'email' => 'required|email',
-            'mobileNo' => 'required|string|min:4|max:15',
-            'address' => 'required|string|min:2|max:250',
-            'country' => 'required|integer|min:2|max:250',
-            'state' => 'required|string|min:2|max:250',
-            'district' => 'required|string|min:2|max:250',
+            'id' => 'required|integer|min:1|max:9999999999999',
+            'email' => 'required|email|min:2|max:250',
+            'mobileNo' => 'required|string|min:2|max:20',
+            'country' => 'required|integer|min:1|max:999999999999',
             'city' => 'required|string|min:2|max:250',
-            'address' => 'required|string|min:2|max:250',
-
+            'address' => 'required|string|min:2|max:500',
+            'district' => 'required|string|min:2|max:250',
+            'state' => 'required|string|min:2|max:250',
             ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
-/*
-
-        $validatorNo = Validator::make($request->all(), [
-            'mobileNo' => 'required|string|min:4|max:15|unique:users,phone,'.$user_id,
-        ]);
         
-        */
         $data= $request->all();
         
         $foodVenderCount = Profile:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
@@ -114,15 +130,19 @@ class ResumeAppController extends Controller
         if($foodVenderCount>=1){
 
 
-            $updateItem = Profile::where('id', '=',$data['id'])->update(['email'=> $data['email'],'phone'=> $data['mobileNo'],'country'=> $data['country'],'state'=> $data['state'],'district'=> $data['district'],'city'=> $data['city'],'address'=> $data['address']]);
+            $updateItem = Profile::where('id', '=',$data['id'])->update([
+                'email'=> $data['email'],
+                'phone'=> $data['mobileNo'],
+                'country'=> $data['country'],
+                'city'=> $data['city'],
+                'address'=> $data['address'],
+                'district'=> $data['district'],
+                'state'=> $data['state']
+            ]);
 
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else
-            {   
-                $updateUser = User::where('id', '=',$user_id)->update(['email'=> $data['email'],'country_id'=> $data['country']]);
-                if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-                else{   $success=true; $get_id = $data['id']; $message='Contact Information updated successfully'; }
-            }
+            $success=true;
+            $get_id=$data['id'];
+            $message='Contact information updated successfully';
 
         } else {
                 $success=false;
@@ -144,854 +164,827 @@ class ResumeAppController extends Controller
 
     public function resumeImageUpload(Request $request){
 
-
         $user_id = auth('sanctum')->user()->id;
-        
-
-        $savingPath='assets/user_images/';
+        $savingPath = public_path('assets/user_images/');
 
         $validator = Validator::make($request->all(), [
-            'image_name'=>'required|mimes:png,jpg,gif,jpeg|max:8048',
+            'image_name' => 'required|mimes:png,jpg,jpeg|max:5120', // 5MB max
             'id' => 'required|integer|min:1|max:999999999999',
-            ]);
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
 
+        try {
+            $data = $request->all();
+            $imageName = $data['image_name'];
 
-            $data= $request->all();
-            $imageName=$data['image_name'];
+            // Verify user owns this profile
+            $profile = Profile::where([['id', '=', $data['id']], ['user_id', '=', $user_id]])->first();
 
-             
+            if(!$profile){
+                return $this->sendError('Unauthorized action.', ['error' => 'Profile not found or access denied']);
+            }
 
-            //  return $user_id."-". $data['id'];
+            // Check file size (5MB = 5242880 bytes)
+            if($imageName->getSize() > 5242880){
+                return $this->sendError('File too large.', ['error' => 'Image must be less than 5MB']);
+            }
 
-            $foodVenderCount = Profile:: where([['id','=',$data['id']], ['user_id','=',$user_id]])->get()->count();
+            // Generate unique filename
+            $getImageName = time() . '_' . uniqid() . '.' . $imageName->getClientOriginalExtension();
+            
+            // Create user directory if it doesn't exist
+            $newPath = $savingPath . '/' . $user_id;
+            if (!file_exists($newPath)) {
+                mkdir($newPath, 0755, true);
+            }
 
-            if($foodVenderCount>=1){
- 
-                $id=$data['id'];
-                $maxOriginalNameSize=50;
-                //   if(strlen($ImageNameOrg) > $maxOriginalNameSize){ $ImageNewNameSet=substr($ImageNameOrg, -5, $maxOriginalNameSize);
-                //       $ImageNewName= $ImageNewNameSet.'.'.$imageName->getClientOriginalExtension();
-                //    }
-                //   else { $ImageNewName = $ImageNameOrg;}// shorting the image name;
-        
-                // $imageNewName =  strtotime('Y-m-d H:i:s');
-        
-                $getImageName = strtotime(date("Y-m-d H:i:s.u")).'.'.$imageName->getClientOriginalExtension();
-        
-                // return $getImageName;
-      
-                $newPath= $savingPath.'/'.$user_id;
-        
-                if (!file_exists($newPath)) {  mkdir($newPath, 0777, true);  }
-        
-                $img = Image::make($imageName)->fit(400, 400, function ($constraint) {
-                        $constraint->upsize();
-                });
-                $upload = $img->save($newPath.'/'.$getImageName, 60);
-        
-                if($upload){
-                    $imageSave = Profile::where("id", $data['id'])->update(["image" => $getImageName]);
-                }
-        
-                if(!$upload){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-                else{   $success=true; $get_id = $id; $message='Image uploaded successfully'; }
+            // Delete old image if exists
+            if($profile->image && file_exists($newPath . '/' . $profile->image)){
+                @unlink($newPath . '/' . $profile->image);
+            }
 
+            // Process and save image (200x200 as per UI requirements)
+            $img = Image::make($imageName);
+            
+            // Resize maintaining aspect ratio, fit to 200x200
+            $img->fit(200, 200, function ($constraint) {
+                $constraint->upsize();
+            });
+            
+            $upload = $img->save($newPath . '/' . $getImageName, 85); // 85% quality
+
+            if($upload){
+                // Update profile with new image name
+                $profile->image = $getImageName;
+                $profile->save();
+
+                // Build image URL
+                $imageUrl = url('assets/user_images/' . $user_id . '/' . $getImageName);
+
+                $response = [
+                    'success' => true,
+                    'data' => [
+                        'id' => $profile->id,
+                        'image' => $getImageName,
+                        'image_url' => $imageUrl,
+                    ],
+                    'message' => 'Image uploaded successfully!',
+                ];
+                return response()->json($response, 200);
             } else {
-                    $success=false;
-                    $get_id=$foodVenderCount;
-                    $message='Unauthorized action'; 
-            }      
+                return $this->sendError('Upload failed.', ['error' => 'Failed to save image. Please try again.']);
+            }
 
-        $response = [
-            'success' => $success,
-            'data'    => $get_id.'-'.$user_id,
-            'message' => $message,
-        ];
-        return response()->json($response, 200);
+        } catch (\Exception $e) {
+            Log::error('Image upload error: ' . $e->getMessage());
+            return $this->sendError('Server error.', ['error' => $e->getMessage()]);
+        }
     }
 
     public function resumeImageDelete(Request $request){
 
         $user_id = auth('sanctum')->user()->id;
+        $savingPath = public_path('assets/user_images/');
        
         $validator = Validator::make($request->all(), [
             'id' => 'required|integer|min:1|max:999999999999',
-            'image_name' => 'required|string|min:2|max:100',
-            ]);
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
-            $data= $request->all();
-            $id=$data['id'];
-            $image_name=$data['image_name'];
-      
-            $foodVenderCount = Profile:: where([['id','=',$data['id']], ['user_id','=',$user_id]])->get()->count();
-            if($foodVenderCount>=1){
-    
-                if($id!=''){
-                    $imageSavedPath='assets/user_images/'.$user_id.'/'. $image_name;
 
-                    if (file_exists($imageSavedPath)) { unlink($imageSavedPath);  }
-                    $delete = Profile::where("id", $id)->update(["image" => NULL]);
-         
-                    if(!$delete){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-                    else{   $success=true; $get_id = $id; $message='Image deleted successfully'; }
-     
-                }
-        
-            } else {
-                    $success=false;
-                    $get_id=$foodVenderCount;
-                    $message='Unauthorized action'; 
-            }      
+        try {
+            $data = $request->all();
+            
+            // Verify user owns this profile
+            $profile = Profile::where([['id', '=', $data['id']], ['user_id', '=', $user_id]])->first();
 
+            if(!$profile){
+                return $this->sendError('Unauthorized action.', ['error' => 'Profile not found or access denied']);
+            }
 
+            // Delete image file if exists
+            $newPath = $savingPath . '/' . $user_id;
+            if($profile->image && file_exists($newPath . '/' . $profile->image)){
+                @unlink($newPath . '/' . $profile->image);
+            }
 
-        $response = [
-            'success' => $success,
-            'data'    => $get_id.'-'.$user_id.'-'.$image_name,
-            'message' => $message,
-        ];
+            // Update profile to remove image reference
+            $profile->image = null;
+            $profile->save();
 
-        
-        return response()->json($response, 200);
+            $response = [
+                'success' => true,
+                'data' => [
+                    'id' => $profile->id,
+                ],
+                'message' => 'Image deleted successfully!',
+            ];
+            return response()->json($response, 200);
 
-
+        } catch (\Exception $e) {
+            Log::error('Image delete error: ' . $e->getMessage());
+            return $this->sendError('Server error.', ['error' => $e->getMessage()]);
+        }
     }
 
-
-
     public function addWorkEx(Request $request){
-
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'country' => 'required|integer|min:1|max:9999',
             'designation' => 'required|string|min:2|max:250',
             'company' => 'required|string|min:2|max:250',
-            'from' => 'required|string|min:2|max:250',
-            'to' => 'required|string|min:2|max:250',
-            'experience_description' => 'string|min:2|max:2000',
-
-            ]);
+            'country' => 'required|integer|min:1|max:999999999999',
+            'from' => 'required|string|min:2|max:20',
+            'to' => 'required|string|min:2|max:20',
+            'experience_description' => 'nullable|string|max:2000',
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
-
-        // $foodVenderCount = UserAppreciation:: where([['id','=',$data['food_menu_id']], ['user_id','=',$user_id]])->get()->count();
-            $foodVenderCount=1;
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-
+        $data = $request->all();
+        
+        try {
             $saveItem = new ProfessionalExperience;
             $saveItem->user_id = $user_id;
-            $saveItem->country = $data['country'];
             $saveItem->designation = $data['designation'];
             $saveItem->company = $data['company'];
+            $saveItem->country = $data['country'];
             $saveItem->from = $data['from'];
             $saveItem->to = $data['to'];
-            $saveItem->experience_description = $data['experience_description'];
-            $saveItem->delete_status = 0;
+            $saveItem->experience_description = $data['experience_description'] ?? '';
             $saveItem->save();
 
-            if(!$saveItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $saveItem->id; $message='Experience added successfully'; }
-
-        } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            if($saveItem->id){
+                $success = true;
+                $get_id = $saveItem->id;
+                $message = 'Work experience added successfully';
+            } else {
+                $success = false;
+                $get_id = 0;
+                $message = 'Failed to save work experience';
+            }
+        } catch (\Exception $e) {
+            Log::error('Add work experience error: ' . $e->getMessage());
+            $success = false;
+            $get_id = 0;
+            $message = 'Server error: ' . $e->getMessage();
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-    
     }
 
     public function editWorkEx(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
-            'country' => 'required|integer|min:1|max:9999',
+            'id' => 'required|integer|min:1|max:9999999999999',
             'designation' => 'required|string|min:2|max:250',
             'company' => 'required|string|min:2|max:250',
-            'from' => 'required|string|min:2|max:250',
-            'to' => 'required|string|min:2|max:250',
-            'experience_description' => 'string|min:2|max:2000',
-            ]);
+            'country' => 'required|integer|min:1|max:999999999999',
+            'from' => 'required|string|min:2|max:20',
+            'to' => 'required|string|min:2|max:20',
+            'experience_description' => 'nullable|string|max:2000',
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
         
-        $foodVenderCount = ProfessionalExperience:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        $experienceCount = ProfessionalExperience::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
         
-        if($foodVenderCount>=1){
+        if($experienceCount >= 1){
+            try {
+                $updateItem = ProfessionalExperience::where('id', '=', $data['id'])->update([
+                    'designation' => $data['designation'],
+                    'company' => $data['company'],
+                    'country' => $data['country'],
+                    'from' => $data['from'],
+                    'to' => $data['to'],
+                    'experience_description' => $data['experience_description'] ?? '',
+                ]);
 
-
-            $updateItem = ProfessionalExperience::where('id', '=',$data['id'])->update(['country'=> $data['country'],'designation'=> $data['designation'],'company'=> $data['company'],'from'=> $data['from'],'to'=> $data['to'],'experience_description'=> $data['experience_description']]);
-
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Experience updated successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Work experience updated successfully';
+            } catch (\Exception $e) {
+                Log::error('Update work experience error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $experienceCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-
-    
     }
 
     public function deleteWorkEx(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
+            'id' => 'required|integer|min:1|max:9999999999999',
         ]);
-
-            if($validator->fails()){
-                return $this->sendError('Validation Error.', $validator->errors());       
-            }
-
-        $data= $request->all();
-
-
-        $foodVenderCount = ProfessionalExperience:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
-
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-            // $updateItem = Food_menu_argument_item::where('id', '=',$data['id'])->delete();
-
-            $updateItem = ProfessionalExperience::where("id", $data['id'])->update(["delete_status" => 1]);
-    
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Experience deleted successfully'; }
-    
-        } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
-        }
-
-        $response = [
-            'success' => $success,
-            'data'    => $get_id,
-            'message' => $message,
-        ];
-        return response()->json($response, 200);
-
-    
-    }     
-
-
-
-
-    public function addEducation(Request $request){
-
-
-        $user_id = auth('sanctum')->user()->id;
-
-        $validator = Validator::make($request->all(), [
-            'country' => 'required|integer|min:1|max:9999',
-            'qualification' => 'required|string|min:2|max:250',
-            'subject' => 'required|string|min:2|max:250',
-            'specialization' => 'required|string|min:2|max:250',
-            'university' => 'required|string|min:2|max:250',
-            'join_year' => 'required|integer|min:1|max:9999',
-            'passing_year' => 'required|integer|min:1|max:9999',
-
-            ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
+        
+        $experienceCount = ProfessionalExperience::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        
+        if($experienceCount >= 1){
+            try {
+                $deleteItem = ProfessionalExperience::where('id', '=', $data['id'])->delete();
 
-        // $foodVenderCount = UserAppreciation:: where([['id','=',$data['food_menu_id']], ['user_id','=',$user_id]])->get()->count();
-            $foodVenderCount=1;
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-
-            $saveItem = new Qualification;
-            $saveItem->user_id = $user_id;
-            $saveItem->country = $data['country'];
-            $saveItem->qualification = $data['qualification'];
-            $saveItem->subject = $data['subject'];
-            $saveItem->specialization = $data['specialization'];
-            $saveItem->university = $data['university'];
-            $saveItem->join_year = $data['join_year'];
-            $saveItem->passing_year = $data['passing_year'];
-            $saveItem->delete_status = 0;
-            $saveItem->save();
-
-            if(!$saveItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $saveItem->id; $message='Education added successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Work experience deleted successfully';
+            } catch (\Exception $e) {
+                Log::error('Delete work experience error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $experienceCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-    
+    }
+
+    public function addEducation(Request $request){
+        $user_id = auth('sanctum')->user()->id;
+
+        $validator = Validator::make($request->all(), [
+            'subject' => 'required|string|min:2|max:250',
+            'qualification' => 'required|string|min:2|max:250',
+            'specialization' => 'required|string|min:2|max:250',
+            'university' => 'required|string|min:2|max:250',
+            'country' => 'required|integer|min:1|max:999999999999',
+            'join_year' => 'required|integer|min:1900|max:2050',
+            'passing_year' => 'required|integer|min:1900|max:2050',
+        ]);
+
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $data = $request->all();
+        
+        try {
+            $education = new Qualification();
+            $education->user_id = $user_id;
+            $education->subject = $data['subject'];
+            $education->qualification = $data['qualification'];
+            $education->specialization = $data['specialization'];
+            $education->university = $data['university'];
+            $education->country = $data['country'];
+            $education->join_year = $data['join_year'];
+            $education->passing_year = $data['passing_year'];
+            $education->save();
+
+            $response = [
+                'success' => true,
+                'data'    => $education->id,
+                'message' => 'Education added successfully!',
+            ];
+            return response()->json($response, 200);
+
+        } catch (\Exception $e) {
+            Log::error('Add Education error: ' . $e->getMessage());
+            return $this->sendError('Server error.', ['error' => $e->getMessage()]);
+        }
     }
 
     public function updateEducation(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
-            'country' => 'required|integer|min:1|max:9999',
-            'qualification' => 'required|string|min:2|max:250',
+            'id' => 'required|integer|min:1|max:9999999999999',
             'subject' => 'required|string|min:2|max:250',
+            'qualification' => 'required|string|min:2|max:250',
             'specialization' => 'required|string|min:2|max:250',
             'university' => 'required|string|min:2|max:250',
-            'join_year' => 'required|integer|min:1|max:9999',
-            'passing_year' => 'required|integer|min:1|max:9999',
-            ]);
+            'country' => 'required|integer|min:1|max:999999999999',
+            'join_year' => 'required|integer|min:1900|max:2050',
+            'passing_year' => 'required|integer|min:1900|max:2050',
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
         
-        $foodVenderCount = Qualification:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        $educationCount = Qualification::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
         
-        if($foodVenderCount>=1){
+        if($educationCount >= 1){
+            try {
+                $updateItem = Qualification::where('id', '=', $data['id'])->update([
+                    'subject' => $data['subject'],
+                    'qualification' => $data['qualification'],
+                    'specialization' => $data['specialization'],
+                    'university' => $data['university'],
+                    'country' => $data['country'],
+                    'join_year' => $data['join_year'],
+                    'passing_year' => $data['passing_year'],
+                ]);
 
-
-            $updateItem = Qualification::where('id', '=',$data['id'])->update(['country'=> $data['country'],'qualification'=> $data['qualification'],'subject'=> $data['subject'],'specialization'=> $data['specialization'],'university'=> $data['university'],'join_year'=> $data['join_year'],'passing_year'=> $data['passing_year']]);
-
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Education updated successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Education updated successfully';
+            } catch (\Exception $e) {
+                Log::error('Update Education error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $educationCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-
-    
     }
 
     public function deleteEducation(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
+            'id' => 'required|integer|min:1|max:9999999999999',
         ]);
-
-            if($validator->fails()){
-                return $this->sendError('Validation Error.', $validator->errors());       
-            }
-
-        $data= $request->all();
-
-
-        $foodVenderCount = Qualification:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
-
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-            // $updateItem = Food_menu_argument_item::where('id', '=',$data['id'])->delete();
-
-            $updateItem = Qualification::where("id", $data['id'])->update(["delete_status" => 1]);
-    
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Education deleted successfully'; }
-    
-        } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
-        }
-
-        $response = [
-            'success' => $success,
-            'data'    => $get_id,
-            'message' => $message,
-        ];
-        return response()->json($response, 200);
-
-    
-    }     
-
-
-
-
-    public function addSkill(Request $request){
-
-
-        $user_id = auth('sanctum')->user()->id;
-
-        $validator = Validator::make($request->all(), [
-            'skill_id' => 'required|integer|min:1|max:99999',
-            'level_id' =>  'required|integer|min:1|max:99999',
-            'year' => 'required|string|min:1|max:250',
-
-            ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
+        
+        $educationCount = Qualification::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        
+        if($educationCount >= 1){
+            try {
+                $deleteItem = Qualification::where('id', '=', $data['id'])->delete();
 
-        // $foodVenderCount = UserAppreciation:: where([['id','=',$data['food_menu_id']], ['user_id','=',$user_id]])->get()->count();
-            $foodVenderCount=1;
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-
-            $saveItem = new UserSkill;
-            $saveItem->user_id = $user_id;
-            $saveItem->skill_id = $data['skill_id'];
-            $saveItem->level_id = $data['level_id'];
-            $saveItem->year = $data['year'];
-            $saveItem->status =1;
-            $saveItem->delete_status = 0;
-            $saveItem->save();
-
-            if(!$saveItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $saveItem->id; $message='Skill added successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Education deleted successfully';
+            } catch (\Exception $e) {
+                Log::error('Delete Education error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $educationCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-    
+    }
+
+    public function addSkill(Request $request){
+        $user_id = auth('sanctum')->user()->id;
+
+        $validator = Validator::make($request->all(), [
+            'skill_id' => 'required|integer|min:1|max:999999999999',
+            'level_id' => 'required|integer|min:1|max:999999999999',
+            'year' => 'required|string|min:1|max:100',
+        ]);
+
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $data = $request->all();
+        
+        try {
+            $skill = new UserSkill();
+            $skill->user_id = $user_id;
+            $skill->skill_id = $data['skill_id'];
+            $skill->level_id = $data['level_id'];
+            $skill->year = $data['year'];
+            $skill->save();
+
+            $response = [
+                'success' => true,
+                'data'    => $skill->id,
+                'message' => 'Skill added successfully!',
+            ];
+            return response()->json($response, 200);
+
+        } catch (\Exception $e) {
+            Log::error('Add Skill error: ' . $e->getMessage());
+            return $this->sendError('Server error.', ['error' => $e->getMessage()]);
+        }
     }
 
     public function updateSkill(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
-            'skill_id' => 'required|integer|min:1|max:99999',
-            'level_id' =>  'required|integer|min:1|max:99999',
-            'year' => 'required|string|min:1|max:250',
-            ]);
+            'id' => 'required|integer|min:1|max:9999999999999',
+            'skill_id' => 'required|integer|min:1|max:999999999999',
+            'level_id' => 'required|integer|min:1|max:999999999999',
+            'year' => 'required|string|min:1|max:100',
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
         
-        $foodVenderCount = UserSkill:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        $skillCount = UserSkill::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
         
-        if($foodVenderCount>=1){
+        if($skillCount >= 1){
+            try {
+                $updateItem = UserSkill::where('id', '=', $data['id'])->update([
+                    'skill_id' => $data['skill_id'],
+                    'level_id' => $data['level_id'],
+                    'year' => $data['year'],
+                ]);
 
-
-            $updateItem = UserSkill::where('id', '=',$data['id'])->update(['skill_id'=> $data['skill_id'],'level_id'=> $data['level_id'],'year'=> $data['year']]);
-
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Skill updated successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Skill updated successfully';
+            } catch (\Exception $e) {
+                Log::error('Update Skill error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $skillCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-
-    
     }
 
     public function deleteSkill(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
+            'id' => 'required|integer|min:1|max:9999999999999',
         ]);
-
-            if($validator->fails()){
-                return $this->sendError('Validation Error.', $validator->errors());       
-            }
-
-        $data= $request->all();
-
-
-        $foodVenderCount = UserSkill:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
-
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-            // $updateItem = Food_menu_argument_item::where('id', '=',$data['id'])->delete();
-
-            $updateItem = UserSkill::where("id", $data['id'])->update(["delete_status" => 1]);
-    
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Skill deleted successfully'; }
-    
-        } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
-        }
-
-        $response = [
-            'success' => $success,
-            'data'    => $get_id,
-            'message' => $message,
-        ];
-        return response()->json($response, 200);
-
-    
-    }     
-
-
-
-
-    public function addLanguage(Request $request){
-
-
-        $user_id = auth('sanctum')->user()->id;
-
-        $validator = Validator::make($request->all(), [
-            'language' => 'required|string|min:1|max:250',
-            'speaking' => 'required|string|min:1|max:150',
-            'reading' => 'required|string|min:2|max:250',
-            'writing' => 'required|string|min:2|max:150',
-
-            ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
+        
+        $skillCount = UserSkill::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        
+        if($skillCount >= 1){
+            try {
+                $deleteItem = UserSkill::where('id', '=', $data['id'])->delete();
 
-        // $foodVenderCount = UserAppreciation:: where([['id','=',$data['food_menu_id']], ['user_id','=',$user_id]])->get()->count();
-            $foodVenderCount=1;
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-
-            $saveItem = new JobLanguage;
-            $saveItem->user_id = $user_id;
-            $saveItem->job_id = 0;
-            $saveItem->language = $data['language'];
-            $saveItem->speaking = $data['speaking'];
-            $saveItem->reading = $data['reading'];
-            $saveItem->writing = $data['writing'];
-            $saveItem->delete_status = 0;
-            $saveItem->save();
-
-            if(!$saveItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $saveItem->id; $message='Language added successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Skill deleted successfully';
+            } catch (\Exception $e) {
+                Log::error('Delete Skill error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $skillCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-    
+    }
+
+    public function addLanguage(Request $request){
+        $user_id = auth('sanctum')->user()->id;
+
+        $validator = Validator::make($request->all(), [
+            'language' => 'required|string|min:1|max:250',
+            'speaking' => 'required|string|min:1|max:100',
+            'reading' => 'required|string|min:1|max:100',
+            'writing' => 'required|string|min:1|max:100',
+        ]);
+
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $data = $request->all();
+        
+        try {
+            $language = new JobLanguage();
+            $language->user_id = $user_id;
+            $language->job_id = 0; // User resume languages use 0 for job_id
+            $language->language = $data['language'];
+            $language->speaking = $data['speaking'];
+            $language->reading = $data['reading'];
+            $language->writing = $data['writing'];
+            $language->save();
+
+            $response = [
+                'success' => true,
+                'data'    => $language->id,
+                'message' => 'Language added successfully!',
+            ];
+            return response()->json($response, 200);
+
+        } catch (\Exception $e) {
+            Log::error('Add Language error: ' . $e->getMessage());
+            Log::error('Add Language stack trace: ' . $e->getTraceAsString());
+            return $this->sendError('Server error: ' . $e->getMessage(), ['error' => $e->getMessage()]);
+        }
     }
 
     public function updateLanguage(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
+            'id' => 'required|integer|min:1|max:9999999999999',
             'language' => 'required|string|min:1|max:250',
-            'speaking' => 'required|string|min:1|max:150',
-            'reading' => 'required|string|min:2|max:250',
-            'writing' => 'required|string|min:2|max:150',
-            ]);
+            'speaking' => 'required|string|min:1|max:100',
+            'reading' => 'required|string|min:1|max:100',
+            'writing' => 'required|string|min:1|max:100',
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
         
-        $foodVenderCount = JobLanguage:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        $languageCount = JobLanguage::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
         
-        if($foodVenderCount>=1){
+        if($languageCount >= 1){
+            try {
+                $updateItem = JobLanguage::where('id', '=', $data['id'])->update([
+                    'language' => $data['language'],
+                    'speaking' => $data['speaking'],
+                    'reading' => $data['reading'],
+                    'writing' => $data['writing'],
+                ]);
 
-
-            $updateItem = JobLanguage::where('id', '=',$data['id'])->update(['language'=> $data['language'],'speaking'=> $data['speaking'],'reading'=> $data['reading'],'writing'=> $data['writing']]);
-
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Language updated successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Language updated successfully';
+            } catch (\Exception $e) {
+                Log::error('Update Language error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $languageCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-
-    
     }
 
     public function deleteLanguage(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
+            'id' => 'required|integer|min:1|max:9999999999999',
         ]);
-
-            if($validator->fails()){
-                return $this->sendError('Validation Error.', $validator->errors());       
-            }
-
-        $data= $request->all();
-
-
-        $foodVenderCount = JobLanguage:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
-
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-            // $updateItem = Food_menu_argument_item::where('id', '=',$data['id'])->delete();
-
-            $updateItem = JobLanguage::where("id", $data['id'])->update(["delete_status" => 1]);
-    
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Language deleted successfully'; }
-    
-        } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
-        }
-
-        $response = [
-            'success' => $success,
-            'data'    => $get_id,
-            'message' => $message,
-        ];
-        return response()->json($response, 200);
-
-    
-    }     
-
-
-
-
-    public function addAppreciation(Request $request){
-
-
-        $user_id = auth('sanctum')->user()->id;
-
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|min:1|max:150',
-            'organization' => 'required|string|min:2|max:250',
-            'month' => 'required|string|min:2|max:150',
-            'year' => 'required|integer|min:1|max:9999',
-
-            ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
+        
+        $languageCount = JobLanguage::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        
+        if($languageCount >= 1){
+            try {
+                $deleteItem = JobLanguage::where('id', '=', $data['id'])->delete();
 
-        // $foodVenderCount = UserAppreciation:: where([['id','=',$data['food_menu_id']], ['user_id','=',$user_id]])->get()->count();
-            $foodVenderCount=1;
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-
-            $saveItem = new UserAppreciation;
-            $saveItem->user_id = $user_id;
-            $saveItem->name = $data['name'];
-            $saveItem->organization = $data['organization'];
-            $saveItem->month = $data['month'];
-            $saveItem->year = $data['year'];
-            $saveItem->status = 1;
-            $saveItem->delete_status = 0;
-            $saveItem->save();
-
-            if(!$saveItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $saveItem->id; $message='Appreciation added successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Language deleted successfully';
+            } catch (\Exception $e) {
+                Log::error('Delete Language error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $languageCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-    
+    }
+
+    public function addAppreciation(Request $request){
+        $user_id = auth('sanctum')->user()->id;
+
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|min:1|max:250',
+            'organization' => 'required|string|min:1|max:250',
+            'month' => 'required|string|min:1|max:100',
+            'year' => 'required|integer|min:1900|max:2050',
+        ]);
+
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $data = $request->all();
+        
+        try {
+            $appreciation = new UserAppreciation();
+            $appreciation->user_id = $user_id;
+            $appreciation->name = $data['name'];
+            $appreciation->organization = $data['organization'];
+            $appreciation->month = $data['month'];
+            $appreciation->year = $data['year'];
+            $appreciation->save();
+
+            $response = [
+                'success' => true,
+                'data'    => $appreciation->id,
+                'message' => 'Appreciation added successfully!',
+            ];
+            return response()->json($response, 200);
+
+        } catch (\Exception $e) {
+            Log::error('Add Appreciation error: ' . $e->getMessage());
+            Log::error('Add Appreciation stack trace: ' . $e->getTraceAsString());
+            return $this->sendError('Server error: ' . $e->getMessage(), ['error' => $e->getMessage()]);
+        }
     }
 
     public function updateAppreciation(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
-            'name' => 'required|string|min:1|max:150',
-            'organization' => 'required|string|min:2|max:250',
-            'month' => 'required|string|min:2|max:150',
-            'year' => 'required|integer|min:1|max:9999',
-            ]);
+            'id' => 'required|integer|min:1|max:9999999999999',
+            'name' => 'required|string|min:1|max:250',
+            'organization' => 'required|string|min:1|max:250',
+            'month' => 'required|string|min:1|max:100',
+            'year' => 'required|integer|min:1900|max:2050',
+        ]);
 
         if($validator->fails()){
             return $this->sendError('Validation Error.', $validator->errors());       
         }
         
-        $data= $request->all();
+        $data = $request->all();
         
-        $foodVenderCount = UserAppreciation:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        $appreciationCount = UserAppreciation::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
         
-        if($foodVenderCount>=1){
+        if($appreciationCount >= 1){
+            try {
+                $updateItem = UserAppreciation::where('id', '=', $data['id'])->update([
+                    'name' => $data['name'],
+                    'organization' => $data['organization'],
+                    'month' => $data['month'],
+                    'year' => $data['year'],
+                ]);
 
-
-            $updateItem = UserAppreciation::where('id', '=',$data['id'])->update(['name'=> $data['name'],'organization'=> $data['organization'],'month'=> $data['month'],'year'=> $data['year']]);
-
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Appreciation updated successfully'; }
-
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Appreciation updated successfully';
+            } catch (\Exception $e) {
+                Log::error('Update Appreciation error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
+            }
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $appreciationCount;
+            $message = 'Unauthorized action'; 
         }
+
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
         
         return response()->json($response, 200);
-
-    
     }
 
     public function deleteAppreciation(Request $request){
-
         $user_id = auth('sanctum')->user()->id;
 
         $validator = Validator::make($request->all(), [
-            'id' => 'required|integer|min:1|max:9999999999999999',
+            'id' => 'required|integer|min:1|max:9999999999999',
         ]);
 
-            if($validator->fails()){
-                return $this->sendError('Validation Error.', $validator->errors());       
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+        
+        $data = $request->all();
+        
+        $appreciationCount = UserAppreciation::where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
+        
+        if($appreciationCount >= 1){
+            try {
+                $deleteItem = UserAppreciation::where('id', '=', $data['id'])->delete();
+
+                $success = true;
+                $get_id = $data['id'];
+                $message = 'Appreciation deleted successfully';
+            } catch (\Exception $e) {
+                Log::error('Delete Appreciation error: ' . $e->getMessage());
+                $success = false;
+                $get_id = 0;
+                $message = 'Server error: ' . $e->getMessage();
             }
-
-        $data= $request->all();
-
-
-        $foodVenderCount = UserAppreciation:: where([['user_id','=',$user_id], ['id','=',$data['id']]])->get()->count();
-
-        if($foodVenderCount>=1){
-            // return $foodVenderCount;
-            // $updateItem = Food_menu_argument_item::where('id', '=',$data['id'])->delete();
-
-            $updateItem = UserAppreciation::where("id", $data['id'])->update(["delete_status" => 1]);
-    
-            if(!$updateItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $data['id']; $message='Appreciation deleted successfully'; }
-    
         } else {
-                $success=false;
-                $get_id=$foodVenderCount;
-                $message='Unauthorized action'; 
+            $success = false;
+            $get_id = $appreciationCount;
+            $message = 'Unauthorized action'; 
         }
 
         $response = [
             'success' => $success,
-            'data'    => $get_id,
+            'data' => $get_id,
             'message' => $message,
         ];
+        
         return response()->json($response, 200);
-
-    
-    }     
-
-    public function sendError($error, $errorMessages = [], $code = 202) 
-    {
-        $response = [
-            'success' => false,
-            'message' => $error,
-        ];
-
-
-        if(!empty($errorMessages)){
-            $response['data'] = $errorMessages;
-        }
-
-
-        return response()->json($response, $code);
-    } 
-
+    }
 }
