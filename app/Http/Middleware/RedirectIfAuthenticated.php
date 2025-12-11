@@ -23,6 +23,10 @@ class RedirectIfAuthenticated
 
         foreach ($guards as $guard) {
             if (Auth::guard($guard)->check()) {
+                // Don't redirect if already on login page to avoid loops
+                if ($request->is('admin/login') || $request->is('admin/password/*')) {
+                    return $next($request);
+                }
                 return redirect(RouteServiceProvider::HOME);
             }
         }
