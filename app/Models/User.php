@@ -34,6 +34,8 @@ class User extends Authenticatable
         'last_name',
         'is_email_verified',
         'otp',
+        'otp_expires_at',
+        'new_mobile',
         'role_id',
         'country_id',
         'is_profile_completed',

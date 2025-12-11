@@ -9,7 +9,10 @@ use App\Http\Controllers\AppApi\AuthBaseController;
 use App\Models\User;
 use App\Models\Profile;
 use App\Models\EmployerProfile;
+use App\Services\SmsGatewayService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Carbon\Carbon;
 use Validator;
 
 
@@ -72,7 +75,7 @@ class AuthAppController extends AuthBaseController
     {
         $validator = Validator::make($request->all(), [
             'country_id' => 'required|numeric|min:1|digits_between: 1,999',
-            'mobile' => 'required|numeric|min:1|digits_between: 1,99999999999',
+            'mobile' => 'required|numeric|digits_between: 8,11', // Updated to 8-11 digits
             'role' => 'required|numeric|min:1|max:2',
             
         ]);
@@ -96,6 +99,60 @@ class AuthAppController extends AuthBaseController
         // return $findNumber;
 
         $genOtp = $this->optGenrate(); // genrate new otp
+        $otpExpiresAt = Carbon::now()->addMinutes(3); // OTP valid for 3 minutes
+
+        // Get country phone code for SMS
+        // Since app only supports Malaysia, use phone code 60
+        // Database stores ISO code (MYS) but SMS gateway needs phone code (60)
+        $countryPhoneCode = '60'; // Malaysia phone code
+        
+        // Send SMS if gateway is enabled
+        $smsGatewayEnabled = env('SMS_GATEWAY_TWO_FACTOR', false);
+        
+        // Log for debugging
+        Log::info('OTP Request', [
+            'mobile' => $input['mobile'],
+            'country_id' => $input['country_id'],
+            'country_phone_code' => $countryPhoneCode,
+            'sms_gateway_enabled' => $smsGatewayEnabled,
+            'otp' => $genOtp
+        ]);
+        
+        if ($smsGatewayEnabled) {
+            $smsService = new SmsGatewayService();
+            $formattedMobile = $smsService->formatMobileNumber($countryPhoneCode, $input['mobile']);
+            
+            Log::info('Sending SMS for login OTP', [
+                'mobile' => $input['mobile'],
+                'formatted_mobile' => $formattedMobile,
+                'role' => $saveRole,
+                'otp' => $genOtp
+            ]);
+            
+            $smsResult = $smsService->sendOtp($formattedMobile, $genOtp);
+            
+            if (!$smsResult['success']) {
+                Log::error('SMS sending failed for login OTP', [
+                    'mobile' => $formattedMobile,
+                    'error' => $smsResult['message'],
+                    'response' => $smsResult['data'] ?? null
+                ]);
+                
+                // Return error if SMS fails (don't save OTP if SMS gateway is enabled but failed)
+                return $this->sendError('Failed to send OTP SMS.', [
+                    'error' => $smsResult['message'] ?? 'Unable to send SMS. Please try again later.'
+                ], 500);
+            } else {
+                Log::info('SMS sent successfully for login OTP', [
+                    'mobile' => $formattedMobile,
+                    'ref' => $smsResult['data']['ref'] ?? null
+                ]);
+            }
+        } else {
+            Log::info('SMS Gateway disabled - using default OTP for login', [
+                'otp' => $genOtp
+            ]);
+        }
 
         if($findNumber>=1)
         {
@@ -109,7 +166,10 @@ class AuthAppController extends AuthBaseController
             }else {
                 $user = User::where('country_id', $input['country_id'])
                 ->where('phone', $input['mobile'])
-                ->update(['otp' => $genOtp]);
+                ->update([
+                    'otp' => $genOtp,
+                    'otp_expires_at' => $otpExpiresAt
+                ]);
                 return $this->sendResponse($user, 'Otp requested successfully.');
             }
 
@@ -126,6 +186,7 @@ class AuthAppController extends AuthBaseController
             $user->public_id =  time() . md5($request->mobile);
             $user->role_id = $saveRole;
             $user->otp = $genOtp;
+            $user->otp_expires_at = $otpExpiresAt;
             $user->save();
 
             if($user->role_id==1){
@@ -163,7 +224,7 @@ class AuthAppController extends AuthBaseController
         
         $validator = Validator::make($request->all(), [
             'country_id' => 'required|numeric|min:1|digits_between: 1,999',
-            'mobile' => 'required|numeric|min:1|digits_between: 1,99999999999',
+            'mobile' => 'required|numeric|digits_between: 8,11', // Updated to 8-11 digits
             'otp' => 'required|string|min:6|max:6',
             'expo_push_token' => 'nullable|string|max:255',
             'device_id' => 'nullable|string|max:255',
@@ -178,20 +239,18 @@ class AuthAppController extends AuthBaseController
         $mobile = (string) $request->mobile;
         $countryId = (int) $request->country_id;
         
-        // First try exact match with country_id
+        // Find user with matching OTP
         $user = User::where('phone', $mobile)
             ->where('country_id', $countryId)
             ->where('otp', $otp)
             ->first();
         
-        // If not found, try without country_id check (in case country_id changed)
-        if (!$user) {
-            $user = User::where('phone', $mobile)
-                ->where('otp', $otp)
-                ->first();
-        }
-
-        if($user){ 
+        if($user) {
+            // Check if OTP is expired
+            if ($user->otp_expires_at && Carbon::now()->gt($user->otp_expires_at)) {
+                return $this->sendError('OTP expired.', ['error' => 'OTP code has expired. Please request a new one.']);
+            }
+            
             Auth::login($user); 
             // $user = Auth::user(); 
             
@@ -209,6 +268,11 @@ class AuthAppController extends AuthBaseController
                 }
             }
             
+            // Clear OTP after successful login
+            $user->otp = null;
+            $user->otp_expires_at = null;
+            $user->save();
+            
             $success['token'] =  $user->createToken('OnlineJobsToken')->plainTextToken; 
             $success['name'] =  $user->name;
             // $success['options'] = $stausMsg;
@@ -224,9 +288,118 @@ class AuthAppController extends AuthBaseController
 
 
     public function optGenrate(){
-
-        return 123456 ;
+        // Check if SMS gateway two-factor is enabled
+        $smsGatewayEnabled = env('SMS_GATEWAY_TWO_FACTOR', false);
         
+        if ($smsGatewayEnabled) {
+            // Generate random 6-digit OTP (100000 to 999999)
+            return str_pad(rand(100000, 999999), 6, '0', STR_PAD_LEFT);
+        } else {
+            // Default OTP for testing
+            return '123456';
+        }
+    }
+
+    /**
+     * Resend OTP for login
+     */
+    public function clientOtpResend(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'country_id' => 'required|numeric|min:1|digits_between: 1,999',
+            'mobile' => 'required|numeric|digits_between: 8,11',
+            'role' => 'required|numeric|min:1|max:2',
+        ]);
+
+        if($validator->fails()){
+            return $this->sendError('Validation Error.', $validator->errors());       
+        }
+
+        $input = $request->all();
+        $saveRole = $input['role'];
+
+        // Check if user exists
+        $user = User::where('phone', $input['mobile'])
+            ->where('country_id', $input['country_id'])
+            ->first();
+
+        if (!$user) {
+            return $this->sendError('User not found.', ['error' => 'Mobile number not registered']);
+        }
+
+        // Check role match
+        if ($user->role_id != $saveRole) {
+            $setMsg = $saveRole == 1 
+                ? "This number is registered as employer account" 
+                : "This number is registered as job seeker account";
+            return $this->sendResponse([], $setMsg, false);
+        }
+
+        // Generate new OTP
+        $genOtp = $this->optGenrate();
+        $otpExpiresAt = Carbon::now()->addMinutes(3);
+
+        // Get country phone code for SMS
+        // Since app only supports Malaysia, use phone code 60
+        $countryPhoneCode = '60'; // Malaysia phone code
+
+        // Send SMS if gateway is enabled
+        $smsGatewayEnabled = env('SMS_GATEWAY_TWO_FACTOR', false);
+        
+        Log::info('OTP Resend Request', [
+            'mobile' => $input['mobile'],
+            'country_id' => $input['country_id'],
+            'country_phone_code' => $countryPhoneCode,
+            'sms_gateway_enabled' => $smsGatewayEnabled,
+            'otp' => $genOtp
+        ]);
+        
+        if ($smsGatewayEnabled) {
+            $smsService = new SmsGatewayService();
+            $formattedMobile = $smsService->formatMobileNumber($countryPhoneCode, $input['mobile']);
+            
+            Log::info('Resending SMS for login OTP', [
+                'mobile' => $input['mobile'],
+                'formatted_mobile' => $formattedMobile,
+                'role' => $saveRole,
+                'otp' => $genOtp
+            ]);
+            
+            $smsResult = $smsService->sendOtp($formattedMobile, $genOtp);
+            
+            if (!$smsResult['success']) {
+                Log::error('SMS resend failed for login OTP', [
+                    'mobile' => $formattedMobile,
+                    'error' => $smsResult['message'],
+                    'response' => $smsResult['data'] ?? null
+                ]);
+                
+                // Return error if SMS fails (don't save OTP if SMS gateway is enabled but failed)
+                return $this->sendError('Failed to resend OTP SMS.', [
+                    'error' => $smsResult['message'] ?? 'Unable to send SMS. Please try again later.'
+                ], 500);
+            } else {
+                Log::info('SMS resent successfully for login OTP', [
+                    'mobile' => $formattedMobile,
+                    'ref' => $smsResult['data']['ref'] ?? null
+                ]);
+            }
+        } else {
+            Log::info('SMS Gateway disabled - using default OTP for resend', [
+                'otp' => $genOtp
+            ]);
+        }
+
+        // Update OTP in database
+        $user->otp = $genOtp;
+        $user->otp_expires_at = $otpExpiresAt;
+        $user->save();
+
+        $message = $smsGatewayEnabled 
+            ? 'OTP resent successfully.'
+            : 'OTP regenerated successfully. Please use the default OTP code.';
+
+        return $this->sendResponse([], $message);
     }
 
     public function getMarginPer(){

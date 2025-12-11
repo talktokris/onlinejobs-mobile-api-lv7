@@ -32,15 +32,17 @@ use App\Models\RetiredPersonnelEducation;
 use App\Models\Maid;
 use App\Models\PartTimeEmployer;
 use App\Models\RoleUser;
-use DB;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-
-use Validator;
+use Illuminate\Support\Facades\Validator;
 use App\Http\Resources\MessageResource;
 
 use App\Http\Controllers\AppApi\FillsAppController;
+use App\Http\Controllers\AppApi\AuthAppController;
 use App\Http\Resources\UserProfileResource;
 use App\Http\Resources\EmployerProfileResource;
+use App\Services\SmsGatewayService;
+use Carbon\Carbon;
 
 
 
@@ -343,6 +345,7 @@ class ProfileAppController extends Controller
           RoleUser::where('user_id', $user_id)->delete();
 
           // Delete Sanctum tokens (all tokens for this authenticated user)
+          /** @var \App\Models\User $user */
           $user->tokens()->delete();
 
           // Security: Delete only the authenticated user's account
@@ -376,6 +379,179 @@ class ProfileAppController extends Controller
               500
           );
       }
+  }
+
+  /**
+   * Request OTP to change mobile number
+   */
+  public function changeMobileNoRequest(Request $request)
+  {
+      $validator = Validator::make($request->all(), [
+          'new_mobile' => 'required|numeric|digits_between:8,11',
+      ]);
+
+      if($validator->fails()){
+          return $this->sendError('Validation Error.', $validator->errors());
+      }
+
+      $user = auth('sanctum')->user();
+      if (!$user) {
+          return $this->sendError('Unauthorized.', ['error' => 'User not authenticated']);
+      }
+
+      $newMobile = (string) $request->new_mobile;
+      $currentMobile = (string) $user->phone;
+
+      // Check if new mobile is same as current
+      if ($newMobile === $currentMobile) {
+          return $this->sendError('New mobile number must be different from current number.', ['error' => 'Please enter a different mobile number']);
+      }
+
+      // Check if new mobile number is already in use by another user
+      $existingUser = User::where('phone', $newMobile)
+          ->where('country_id', $user->country_id)
+          ->where('id', '!=', $user->id)
+          ->first();
+
+      if ($existingUser) {
+          return $this->sendError('Mobile number already in use.', ['error' => 'This mobile number is already registered with another account']);
+      }
+
+      // Generate OTP
+      $authController = new AuthAppController();
+      $genOtp = $authController->optGenrate();
+      $otpExpiresAt = Carbon::now()->addMinutes(3);
+
+      // Get country phone code (hardcoded to 60 for Malaysia)
+      $countryPhoneCode = '60';
+
+      // Send SMS if gateway is enabled
+      $smsGatewayEnabled = env('SMS_GATEWAY_TWO_FACTOR', false);
+      
+      Log::info('Change Mobile OTP Request', [
+          'user_id' => $user->id,
+          'current_mobile' => $currentMobile,
+          'new_mobile' => $newMobile,
+          'country_phone_code' => $countryPhoneCode,
+          'sms_gateway_enabled' => $smsGatewayEnabled,
+          'otp' => $genOtp
+      ]);
+      
+      if ($smsGatewayEnabled) {
+          $smsService = new SmsGatewayService();
+          $formattedMobile = $smsService->formatMobileNumber($countryPhoneCode, $newMobile);
+          
+          Log::info('Sending SMS for mobile change', [
+              'formatted_mobile' => $formattedMobile,
+              'otp' => $genOtp
+          ]);
+          
+          $smsResult = $smsService->sendOtp($formattedMobile, $genOtp);
+          
+          if (!$smsResult['success']) {
+              Log::error('SMS sending failed for mobile change', [
+                  'mobile' => $formattedMobile,
+                  'error' => $smsResult['message'],
+                  'response' => $smsResult['data'] ?? null
+              ]);
+              
+              // Return error if SMS fails (don't save OTP if SMS gateway is enabled but failed)
+              return $this->sendError('Failed to send OTP SMS.', [
+                  'error' => $smsResult['message'] ?? 'Unable to send SMS. Please try again later.'
+              ], 500);
+          } else {
+              Log::info('SMS sent successfully for mobile change', [
+                  'mobile' => $formattedMobile,
+                  'ref' => $smsResult['data']['ref'] ?? null
+              ]);
+          }
+      } else {
+          Log::info('SMS Gateway disabled - using default OTP for mobile change', [
+              'otp' => $genOtp
+          ]);
+      }
+
+      // Store OTP and new mobile number temporarily
+      /** @var \App\Models\User $user */
+      $user->otp = $genOtp;
+      $user->otp_expires_at = $otpExpiresAt;
+      $user->new_mobile = $newMobile; // Store new mobile temporarily
+      $user->save();
+
+      $message = $smsGatewayEnabled 
+          ? 'OTP sent to new mobile number successfully.'
+          : 'OTP generated successfully. Please use the default OTP code.';
+
+      return response()->json([
+          'success' => true,
+          'message' => $message
+      ], 200);
+  }
+
+  /**
+   * Verify OTP and update mobile number
+   */
+  public function changeMobileNoVerify(Request $request)
+  {
+      $validator = Validator::make($request->all(), [
+          'new_mobile' => 'required|numeric|digits_between:8,11',
+          'otp' => 'required|string|min:6|max:6',
+      ]);
+
+      if($validator->fails()){
+          return $this->sendError('Validation Error.', $validator->errors());
+      }
+
+      $user = auth('sanctum')->user();
+      if (!$user) {
+          return $this->sendError('Unauthorized.', ['error' => 'User not authenticated']);
+      }
+
+      $otp = (string) $request->otp;
+      $newMobile = (string) $request->new_mobile;
+
+      // Verify OTP matches
+      if ($user->otp !== $otp) {
+          return $this->sendError('Invalid OTP code.', ['error' => 'Incorrect OTP code']);
+      }
+
+      // Check if OTP is expired
+      if ($user->otp_expires_at && Carbon::now()->gt($user->otp_expires_at)) {
+          return $this->sendError('OTP expired.', ['error' => 'OTP code has expired. Please request a new one.']);
+      }
+
+      // Verify new mobile matches the one stored
+      if ($user->new_mobile !== $newMobile) {
+          return $this->sendError('Mobile number mismatch.', ['error' => 'New mobile number does not match the one OTP was sent to']);
+      }
+
+      // Check if new mobile number is still available (double check)
+      $existingUser = User::where('phone', $newMobile)
+          ->where('country_id', $user->country_id)
+          ->where('id', '!=', $user->id)
+          ->first();
+
+      if ($existingUser) {
+          return $this->sendError('Mobile number already in use.', ['error' => 'This mobile number is already registered with another account']);
+      }
+
+      // Update mobile number
+      /** @var \App\Models\User $user */
+      $user->phone = $newMobile;
+      $user->otp = null;
+      $user->otp_expires_at = null;
+      $user->new_mobile = null; // Clear temporary field
+      $user->save();
+
+      Log::info('Mobile number changed successfully', [
+          'user_id' => $user->id,
+          'new_mobile' => $newMobile
+      ]);
+
+      return response()->json([
+          'success' => true,
+          'message' => 'Mobile number updated successfully. Please login again with your new mobile number.'
+      ], 200);
   }
 
   public function sendError($error, $errorMessages = [], $code = 404) 

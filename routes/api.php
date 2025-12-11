@@ -43,6 +43,7 @@ Route::namespace('AppApi')->group(function(){
     Route::post('app-user-login', 'AuthAppController@clientLoginEmail');
     Route::post('app-user-otp-login', 'AuthAppController@clientOtpLogin');
     Route::post('app-user-otp-request', 'AuthAppController@clientOtpRequest');
+    Route::post('app-user-otp-resend', 'AuthAppController@clientOtpResend');
 
   
 });
@@ -88,6 +89,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user-messages-count', [ProfileAppController::class,'userMessageReadCount'])->name('postUserMessageReadCount');
     Route::post('/user-messages-seen', [ProfileAppController::class,'userMessageReadUpdate'])->name('postUserMessageReadupdate');
     Route::post('/user-delete-account', [ProfileAppController::class,'deleteAccount'])->name('postUserDeleteAccount');
+    Route::post('/user-change-mobile-request', [ProfileAppController::class,'changeMobileNoRequest'])->name('postUserChangeMobileRequest');
+    Route::post('/user-change-mobile-verify', [ProfileAppController::class,'changeMobileNoVerify'])->name('postUserChangeMobileVerify');
     
     // User chat routes (job seeker)
     Route::get('/user/chat/threads', [UserMsgController::class, 'getThreads'])->name('userChatThreads');
