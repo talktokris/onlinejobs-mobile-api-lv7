@@ -32,7 +32,11 @@ class EmployerAppController extends Controller
 
       // return "Hi";
 
+      $user_id = auth('sanctum')->user()->id;
+
       $jobs = Job::where('worker_type', '0')
+      ->where('user_id', '=', $user_id)
+      ->where('delete_status', '=', 0)
       ->with('post')
       ->with('employer.company_country_data')
       ->with('jobPointsDescriptions')

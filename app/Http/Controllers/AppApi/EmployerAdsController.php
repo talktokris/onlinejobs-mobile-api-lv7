@@ -32,7 +32,9 @@ class EmployerAdsController extends Controller
 
       $user_id = auth('sanctum')->user()->id;
 
-      $jobs = Job::where('worker_type', '0')->where('user_id','=', $user_id)
+      $jobs = Job::where('worker_type', '0')
+      ->where('user_id','=', $user_id)
+      ->where('delete_status', '=', 0)
       ->with('post')
       ->with('employer.company_country_data')
       ->with('jobPointsDescriptions')
@@ -70,7 +72,9 @@ class EmployerAdsController extends Controller
 
       //  $jobs = Job::where('id','=', $job_id)
 
-      $jobs = Job::where('id','=', $job_id)->where('user_id','=', $user_id)
+      $jobs = Job::where('id','=', $job_id)
+      ->where('user_id','=', $user_id)
+      ->where('delete_status', '=', 0)
       ->with('post')
       ->with('employer.company_country_data')
       ->with('jobPointsDescriptions')
@@ -197,7 +201,27 @@ class EmployerAdsController extends Controller
           $saveItem->save();
 
           if(!$saveItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-          else{   $success=true; $get_id = $saveItem->id; $message='New Ad created successfully'; }
+          else{   
+              $success=true; 
+              $get_id = $saveItem->id; 
+              $message='New Ad created successfully';
+              
+              // Send push notification to all job seekers when ad is published
+              if ($data['publish_status'] == 'Published' || $data['publish_status'] == 'published') {
+                  $notificationService = new \App\Services\ExpoNotificationService();
+                  $employer = User::find($user_id);
+                  $employerName = $employer ? $employer->name : 'An employer';
+                  $jobTitle = $data['job_vacancies_type'] ?? 'a new job';
+                  
+                  $notificationTitle = 'New Job Posted';
+                  $notificationBody = $employerName . ' posted ' . $jobTitle;
+                  
+                  $notificationService->sendToAllJobSeekers($notificationTitle, $notificationBody, [
+                      'type' => 'new_ad',
+                      'job_id' => $saveItem->id
+                  ]);
+              }
+          }
 
       } else {
               $success=false;
@@ -239,7 +263,7 @@ class EmployerAdsController extends Controller
       $findAdsVarificationCount = Job:: where([['user_id','=',$user_id], ['id','=',$data['job_id']]])->get()->count();
      
 
-      if($findJobVarificationCount==$findAdsVarificationCount){
+      if($findJobVarificationCount > 0 && $findAdsVarificationCount > 0){
 
    
 
@@ -271,8 +295,8 @@ class EmployerAdsController extends Controller
 
       } else {
               $success=false;
-              $get_id=$foodVenderCount;
-              $message='Unauthorized action'; 
+              $get_id=0;
+              $message='Unauthorized action. Job applicant or job not found.'; 
       }
       $response = [
           'success' => $success,

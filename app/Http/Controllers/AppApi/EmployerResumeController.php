@@ -369,5 +369,84 @@ class EmployerResumeController extends Controller
         return response()->json($response, $code);
     } 
 
+    /**
+     * Get popular search keywords for resume search
+     */
+    public function getPopularSearchKeywords(Request $request)
+    {
+        // Popular search keywords - can be moved to database later
+        $keywords = [
+            // General job categories
+            'Electrician',
+            'Plumber',
+            'General Labor',
+            'House Maid',
+            'House Keeping',
+            'Driver',
+            'Cook',
+            'Security Guard',
+            'Cleaner',
+            'Receptionist',
+            'Cashier',
+            'Sales Person',
+            'Accountant',
+            'Nurse',
+            'Teacher',
+            
+            // Technical skills from image
+            'Blueprint Reading',
+            'MIG Welding',
+            'Fabricating',
+            'Steel Manufacturing',
+            'Grinding',
+            'TIG Welding',
+            'Instructing',
+            'Torching',
+            'Arc Welding',
+            
+            // Care services
+            'Baby Care',
+            'Children Care',
+            'Elderly Care',
+            'Disable Care',
+            
+            // Additional related keywords
+            'Welder',
+            'Mechanic',
+            'Carpenter',
+            'Painter',
+            'Mason',
+            'Construction Worker',
+            'Factory Worker',
+            'Warehouse Worker',
+            'Delivery Driver',
+            'Waiter',
+            'Waitress',
+            'Barista',
+            'Chef',
+            'Kitchen Helper',
+            'Janitor',
+            'Gardener',
+            'Maintenance Worker',
+            'Technician',
+            'Operator',
+            'Supervisor',
+            'Manager',
+            'Assistant',
+            'Clerk',
+            'Data Entry',
+            'Customer Service',
+            'Call Center',
+            'Office Worker',
+            'Administrative Assistant',
+        ];
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Popular search keywords retrieved successfully',
+            'data' => $keywords
+        ], 200);
+    }
+
     
 }

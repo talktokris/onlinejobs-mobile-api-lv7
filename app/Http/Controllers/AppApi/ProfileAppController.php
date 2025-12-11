@@ -9,7 +9,31 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Country;
 use App\Models\Message;
+use App\Models\UserSkill;
+use App\Models\JobLanguage;
+use App\Models\UserAppreciation;
+use App\Models\Qualification;
+use App\Models\ProfessionalExperience;
+use App\Models\ResumeBookmark;
+use App\Models\JobBookmark;
+use App\Models\Applicant;
+use App\Models\JobApplicant;
+use App\Models\Experience;
+use App\Models\Education;
+use App\Models\Profile;
+use App\Models\UserProfile;
+use App\Models\EmployerProfile;
+use App\Models\AgentProfile;
+use App\Models\ProfessionalProfile;
+use App\Models\RetiredPersonnel;
+use App\Models\RetiredPersonnelsLanguage;
+use App\Models\RetiredPersonnelsWorkExperience;
+use App\Models\RetiredPersonnelEducation;
+use App\Models\Maid;
+use App\Models\PartTimeEmployer;
+use App\Models\RoleUser;
 use DB;
+use Illuminate\Support\Facades\Log;
 
 use Validator;
 use App\Http\Resources\MessageResource;
@@ -211,6 +235,147 @@ class ProfileAppController extends Controller
           ];
           return response()->json($response, 200);
       
+  }
+
+  public function deleteAccount(Request $request)
+  {
+      // Validate confirmation text
+      $validator = Validator::make($request->all(), [
+          'confirmation_text' => 'required|string|in:Delete',
+      ]);
+
+      if($validator->fails()){
+          return $this->sendError('Validation Error.', $validator->errors(), 400);       
+      }
+
+      // Security: Only allow authenticated user to delete their own account
+      // The token is tied to a specific user, so auth('sanctum')->user() ensures
+      // the user can only delete the account associated with their token
+      $user = auth('sanctum')->user();
+      
+      if (!$user) {
+          return $this->sendError('Unauthorized. Please login to continue.', [], 401);
+      }
+
+      // Explicitly use only the authenticated user's ID from the token
+      // Ignore any user_id that might be passed in the request for security
+      $user_id = $user->id;
+      
+      // Additional security check: Verify the user exists and is active
+      $userExists = User::where('id', $user_id)->first();
+      if (!$userExists) {
+          return $this->sendError('User account not found.', [], 404);
+      }
+
+      try {
+          DB::beginTransaction();
+
+          // Delete user_skills
+          UserSkill::where('user_id', $user_id)->delete();
+
+          // Delete job_languages
+          JobLanguage::where('user_id', $user_id)->delete();
+
+          // Delete user_appreciations
+          UserAppreciation::where('user_id', $user_id)->delete();
+
+          // Delete qualifications
+          Qualification::where('user_id', $user_id)->delete();
+
+          // Delete professional_experiences
+          ProfessionalExperience::where('user_id', $user_id)->delete();
+
+          // Delete resume_bookmarks
+          ResumeBookmark::where('user_id', $user_id)->delete();
+
+          // Delete job_bookmarks
+          JobBookmark::where('user_id', $user_id)->delete();
+
+          // Delete applicants
+          Applicant::where('user_id', $user_id)->delete();
+
+          // Delete job_applicants
+          JobApplicant::where('user_id', $user_id)->delete();
+
+          // Delete experiences
+          Experience::where('user_id', $user_id)->delete();
+
+          // Delete educations
+          Education::where('user_id', $user_id)->delete();
+
+          // Delete profile
+          Profile::where('user_id', $user_id)->delete();
+
+          // Delete user_profile
+          UserProfile::where('user_id', $user_id)->delete();
+
+          // Delete employer_profile (if exists)
+          EmployerProfile::where('user_id', $user_id)->delete();
+
+          // Delete agent_profile (if exists)
+          AgentProfile::where('user_id', $user_id)->delete();
+
+          // Delete professional_profile (if exists)
+          ProfessionalProfile::where('user_id', $user_id)->delete();
+
+          // Delete retired_personnel and related
+          $retiredPersonnel = RetiredPersonnel::where('user_id', $user_id)->first();
+          if ($retiredPersonnel) {
+              RetiredPersonnelsLanguage::where('retired_personnel_id', $retiredPersonnel->id)->delete();
+              RetiredPersonnelsWorkExperience::where('retired_personnel_id', $retiredPersonnel->id)->delete();
+              RetiredPersonnelEducation::where('retired_personnel_id', $retiredPersonnel->id)->delete();
+              $retiredPersonnel->delete();
+          }
+
+          // Delete part_time_maid (if exists)
+          Maid::where('user_id', $user_id)->delete();
+
+          // Delete part_time_employer (if exists)
+          PartTimeEmployer::where('user_id', $user_id)->delete();
+
+          // Delete messages (where user is sender, receiver, or user_id matches)
+          Message::where('user_id', $user_id)
+                 ->orWhere('sender_id', $user_id)
+                 ->orWhere('receiver_id', $user_id)
+                 ->delete();
+
+          // Delete role_user (pivot table)
+          RoleUser::where('user_id', $user_id)->delete();
+
+          // Delete Sanctum tokens (all tokens for this authenticated user)
+          $user->tokens()->delete();
+
+          // Security: Delete only the authenticated user's account
+          // $user is the authenticated user from the token, ensuring
+          // no one can delete another user's account
+          $deletedUserId = $user->id;
+          $deletedUserEmail = $user->email;
+          $user->delete();
+          
+          // Log account deletion for security audit
+          Log::info('Account deleted', [
+              'user_id' => $deletedUserId,
+              'email' => $deletedUserEmail,
+              'deleted_at' => now(),
+          ]);
+
+          DB::commit();
+
+          return response()->json([
+              'success' => true,
+              'message' => 'Account deleted successfully'
+          ], 200);
+
+      } catch (\Exception $e) {
+          DB::rollBack();
+          Log::error('Account deletion error: ' . $e->getMessage());
+          
+          return $this->sendError(
+              'Failed to delete account. Please try again or contact support.',
+              ['error' => $e->getMessage()],
+              500
+          );
+      }
   }
 
   public function sendError($error, $errorMessages = [], $code = 404) 

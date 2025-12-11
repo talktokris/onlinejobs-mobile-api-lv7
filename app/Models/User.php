@@ -36,8 +36,10 @@ class User extends Authenticatable
         'otp',
         'role_id',
         'country_id',
-        'is_profile_completed'
-    
+        'is_profile_completed',
+        'expo_push_token',
+        'device_id',
+        'notification_enabled'
     ];
 
     /*----------- Kris Code End ---------------- */

@@ -28,6 +28,7 @@ use App\Http\Controllers\AppApi\EmployerAdsController;
 use App\Http\Controllers\AppApi\EmployerProfileController;
 use App\Http\Controllers\AppApi\EmployerResumeController;
 use App\Http\Controllers\AppApi\EmployerMsgController;
+use App\Http\Controllers\AppApi\UserMsgController;
 
 
 
@@ -86,6 +87,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/user-messages', [ProfileAppController::class,'userMessages'])->name('postUserBookmarks');
     Route::post('/user-messages-count', [ProfileAppController::class,'userMessageReadCount'])->name('postUserMessageReadCount');
     Route::post('/user-messages-seen', [ProfileAppController::class,'userMessageReadUpdate'])->name('postUserMessageReadupdate');
+    Route::post('/user-delete-account', [ProfileAppController::class,'deleteAccount'])->name('postUserDeleteAccount');
+    
+    // User chat routes (job seeker)
+    Route::get('/user/chat/threads', [UserMsgController::class, 'getThreads'])->name('userChatThreads');
+    Route::get('/user/chat/thread/{thread_id}', [UserMsgController::class, 'getThread'])->name('userChatThread');
+    Route::post('/user/chat/reply', [UserMsgController::class, 'replyMessage'])->name('userChatReply');
+    Route::put('/user/chat/message/{messageId}/edit', [UserMsgController::class, 'editMessage'])->name('userChatEditMessage');
+    Route::delete('/user/chat/message/{messageId}', [UserMsgController::class, 'deleteMessage'])->name('userChatDeleteMessage');
     
     Route::post('/home-top-jobs', [JobsAppController::class,'topHome'])->name('postTopHome');
     Route::post('/job-listing', [JobsAppController::class,'joblist'])->name('postJoblist');
@@ -144,6 +153,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     
     Route::post('/employer-resume-search', [EmployerResumeController::class,'employerResumeSearch'])->name('postEmployerResumeSearch');
+    Route::get('/employer-resume-popular-keywords', [EmployerResumeController::class,'getPopularSearchKeywords'])->name('getPopularSearchKeywords');
     Route::post('/employer-resume-view', [EmployerResumeController::class,'employerResumeView'])->name('postEmployerResumeView');
     Route::post('/employer-resume-contact-view', [EmployerResumeController::class,'employerResumeContactView'])->name('postEmployerResumeContactView');
     Route::post('/employer-resume-select-action', [EmployerResumeController::class,'employerResumeSelectAction'])->name('postEmployerResumeSelectAction');
@@ -157,6 +167,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/employer-message-thread-view', [EmployerMsgController::class,'employerMessageThreadView'])->name('postEmployerMessageThreadView');
     Route::post('/employer-message-thread-create', [EmployerMsgController::class,'employerMessageThreadCreate'])->name('postEmployerMessageThreadCreate');
     Route::post('/employer-message-thread-reply', [EmployerMsgController::class,'employerMessageThreadReply'])->name('postEmployerMessageThreadReply');
+    
+    // New chat routes
+    Route::post('/employer/chat/start', [EmployerMsgController::class, 'startChat'])->name('employerChatStart');
+    Route::get('/employer/chat/threads', [EmployerMsgController::class, 'getThreads'])->name('employerChatThreads');
+    Route::get('/employer/chat/thread/{thread_id}', [EmployerMsgController::class, 'getThread'])->name('employerChatThread');
+    Route::post('/employer/chat/send', [EmployerMsgController::class, 'sendMessage'])->name('employerChatSend');
+    Route::post('/employer/chat/edit', [EmployerMsgController::class, 'editMessage'])->name('employerChatEdit');
+    Route::post('/employer/chat/delete', [EmployerMsgController::class, 'deleteMessage'])->name('employerChatDelete');
+    Route::post('/employer/chat/edit', [EmployerMsgController::class, 'editMessage'])->name('employerChatEdit');
+    Route::post('/employer/chat/delete', [EmployerMsgController::class, 'deleteMessage'])->name('employerChatDelete');
   
 
         

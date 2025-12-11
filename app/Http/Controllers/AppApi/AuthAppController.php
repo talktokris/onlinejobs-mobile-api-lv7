@@ -165,7 +165,8 @@ class AuthAppController extends AuthBaseController
             'country_id' => 'required|numeric|min:1|digits_between: 1,999',
             'mobile' => 'required|numeric|min:1|digits_between: 1,99999999999',
             'otp' => 'required|string|min:6|max:6',
-            
+            'expo_push_token' => 'nullable|string|max:255',
+            'device_id' => 'nullable|string|max:255',
         ]);
 
         if($validator->fails()){
@@ -193,6 +194,21 @@ class AuthAppController extends AuthBaseController
         if($user){ 
             Auth::login($user); 
             // $user = Auth::user(); 
+            
+            // Update device token and device ID if provided
+            if ($request->has('expo_push_token') || $request->has('device_id')) {
+                $updateData = [];
+                if ($request->has('expo_push_token') && !empty($request->expo_push_token)) {
+                    $updateData['expo_push_token'] = $request->expo_push_token;
+                }
+                if ($request->has('device_id') && !empty($request->device_id)) {
+                    $updateData['device_id'] = $request->device_id;
+                }
+                if (!empty($updateData)) {
+                    $user->update($updateData);
+                }
+            }
+            
             $success['token'] =  $user->createToken('OnlineJobsToken')->plainTextToken; 
             $success['name'] =  $user->name;
             // $success['options'] = $stausMsg;

@@ -30,6 +30,7 @@ class JobsAppController extends Controller
     {
 
         $jobs = Job::where('worker_type', '0')
+        ->where('delete_status', '=', 0)
         ->with('post')
         ->with('employer.company_country_data')
         ->with('jobPointsDescriptions')
@@ -81,6 +82,7 @@ class JobsAppController extends Controller
     public function joblist(Request $request)
     {
         $jobs = Job::where('worker_type', '0')
+        ->where('delete_status', '=', 0)
         ->with('post')
         ->with('employer.country_data')
         ->with('jobPointsDescriptions')
@@ -132,6 +134,7 @@ class JobsAppController extends Controller
             // $PreCount=1;
             
         $messageController = new CommanMessageController();
+        $notificationService = new \App\Services\ExpoNotificationService();
 
          $employerData = Job:: where('id','=',$job_id)->get()->first();
          $employer_id = $employerData->user_id;
@@ -139,9 +142,20 @@ class JobsAppController extends Controller
          $setTitle='You have received new applicaion advertisement';
          $setMessagText='Dear employer, Your have received new applicaion on your running advertisement. Please findout more about it by our mobile application.';
          $messageSave = $messageController->messageCreate($employer_id, $setTitle, $setMessagText);
+         
+         // Send push notification to employer
+         $jobSeeker = User::find($user_id);
+         $jobTitle = $employerData->title ?? 'a job';
+         $notificationTitle = 'New Job Application';
+         $notificationBody = $jobSeeker ? $jobSeeker->name . ' applied for ' . $jobTitle : 'You have received a new job application';
+         $notificationService->sendToUser($employer_id, $notificationTitle, $notificationBody, [
+             'type' => 'job_application',
+             'job_id' => $job_id,
+             'applicant_id' => $user_id
+         ]);
          // $users = messageCreate($id=0, $title="", $messageText="");
        
-        //Massage Saving for Employer
+        //Massage Saving for User
 
         $setTitle='You have successfully applied for the job' ;
         $setMessagText='Dear User, Your job application is submited and will be get notify for futher process.';
