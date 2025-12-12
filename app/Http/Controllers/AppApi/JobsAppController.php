@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
 use App\Models\Job;
+use App\Models\User;
 use DB;
 use App\Models\JobLanguage;
 use App\Models\JobAcademic;
@@ -31,6 +32,7 @@ class JobsAppController extends Controller
 
         $jobs = Job::where('worker_type', '0')
         ->where('delete_status', '=', 0)
+        ->where('publish_status', '=', 1)
         ->with('post')
         ->with('employer.company_country_data')
         ->with('jobPointsDescriptions')
@@ -83,6 +85,7 @@ class JobsAppController extends Controller
     {
         $jobs = Job::where('worker_type', '0')
         ->where('delete_status', '=', 0)
+        ->where('publish_status', '=', 1)
         ->with('post')
         ->with('employer.country_data')
         ->with('jobPointsDescriptions')
@@ -128,7 +131,12 @@ class JobsAppController extends Controller
         $job_id =$data['job_id'] ;
 
 
-        $PreCount = JobApplicant:: where([['job_id','=',$data['job_id']], ['user_id','=',$user_id]])->get()->count();
+        // Check if application already exists (including revoked ones)
+        $PreCount = JobApplicant::where([
+            ['job_id','=',$data['job_id']], 
+            ['user_id','=',$user_id],
+            ['delete_status','=',0]
+        ])->count();
 
         // return $job_id;
             // $PreCount=1;
@@ -136,35 +144,14 @@ class JobsAppController extends Controller
         $messageController = new CommanMessageController();
         $notificationService = new \App\Services\ExpoNotificationService();
 
-         $employerData = Job:: where('id','=',$job_id)->get()->first();
-         $employer_id = $employerData->user_id;
-        //  return $employer_id;
-         $setTitle='You have received new applicaion advertisement';
-         $setMessagText='Dear employer, Your have received new applicaion on your running advertisement. Please findout more about it by our mobile application.';
-         $messageSave = $messageController->messageCreate($employer_id, $setTitle, $setMessagText);
-         
-         // Send push notification to employer
-         $jobSeeker = User::find($user_id);
-         $jobTitle = $employerData->title ?? 'a job';
-         $notificationTitle = 'New Job Application';
-         $notificationBody = $jobSeeker ? $jobSeeker->name . ' applied for ' . $jobTitle : 'You have received a new job application';
-         $notificationService->sendToUser($employer_id, $notificationTitle, $notificationBody, [
-             'type' => 'job_application',
-             'job_id' => $job_id,
-             'applicant_id' => $user_id
-         ]);
-         // $users = messageCreate($id=0, $title="", $messageText="");
-       
-        //Massage Saving for User
-
-        $setTitle='You have successfully applied for the job' ;
-        $setMessagText='Dear User, Your job application is submited and will be get notify for futher process.';
-        $messageSave = $messageController->messageCreate($user_id, $setTitle, $setMessagText);
-
+        $employerData = Job::with('post')->where('id','=',$job_id)->first();
+        if (!$employerData) {
+            return $this->sendError('Job not found.', [], 404);
+        }
+        $employer_id = $employerData->user_id;
 
         if($PreCount==0)
         {
-
             $saveItem = new JobApplicant;
             $saveItem->user_id = $user_id;
             $saveItem->job_id = $job_id;
@@ -173,22 +160,49 @@ class JobsAppController extends Controller
             $saveItem->delete_status = 0;
             $saveItem->save();
 
-            if(!$saveItem){   $success=false;   $get_id = 1; $message='Unknown Error, Plz Contact support'; }
-            else{   $success=true; $get_id = $saveItem->id; $message='Job apply added successfully'; }
-
-         //Massage Saving for User
-     
-
-         
+            if(!$saveItem){   
+                $success=false;   
+                $get_id = 1; 
+                $message='Unknown Error, Plz Contact support'; 
+            }
+            else{   
+                $success=true; 
+                $get_id = $saveItem->id; 
+                $message='Job apply added successfully'; 
+                
+                // Send messages and notifications only if application was successfully created
+                // Message for employer
+                $setTitle='You have received new applicaion advertisement';
+                $setMessagText='Dear employer, Your have received new applicaion on your running advertisement. Please findout more about it by our mobile application.';
+                $messageSave = $messageController->messageCreate($employer_id, $setTitle, $setMessagText);
+                
+                // Send push notification to employer
+                $jobSeeker = User::find($user_id);
+                $jobTitle = ($employerData->post && $employerData->post->name) ? $employerData->post->name : ($employerData->positions_name ?? 'a job');
+                $notificationTitle = 'New Job Application';
+                $notificationBody = $jobSeeker ? $jobSeeker->name . ' applied for ' . $jobTitle : 'You have received a new job application';
+                try {
+                    $notificationService->sendToUser($employer_id, $notificationTitle, $notificationBody, [
+                        'type' => 'job_application',
+                        'job_id' => $job_id,
+                        'applicant_id' => $user_id
+                    ]);
+                } catch (\Exception $e) {
+                    // Log error but don't fail the application
+                }
+                
+                // Message for user
+                $setTitle='You have successfully applied for the job' ;
+                $setMessagText='Dear User, Your job application is submited and will be get notify for futher process.';
+                $messageSave = $messageController->messageCreate($user_id, $setTitle, $setMessagText);
+            }
 
         } 
         else 
         {
-
             $success=false;
             $get_id=$PreCount;
             $message='You have already applied this job'; 
-     
         }
         
         $response = 
