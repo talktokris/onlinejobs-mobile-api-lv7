@@ -19,29 +19,31 @@ class EmployerController extends Controller
      */
     public function index(Request $request)
     {
+        // Start with base query for employers (role_id = 2)
         $query = User::where('role_id', 2)->with('employer_profile');
 
-        // Search
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%")
-                  ->orWhereHas('employer_profile', function($q) use ($search) {
-                      $q->where('company_name', 'like', "%{$search}%");
+        // Search by search word (name, email, phone, company name) - Fixed search functionality
+        $searchTerm = trim($request->input('search', ''));
+        if (!empty($searchTerm)) {
+            $searchPattern = '%' . $searchTerm . '%';
+            $query->where(function($q) use ($searchPattern) {
+                $q->where('name', 'LIKE', $searchPattern)
+                  ->orWhere('email', 'LIKE', $searchPattern)
+                  ->orWhere('phone', 'LIKE', $searchPattern)
+                  ->orWhereHas('employer_profile', function($q) use ($searchPattern) {
+                      $q->where('company_name', 'LIKE', $searchPattern);
                   });
             });
         }
 
-        // Filter by status
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        } else {
-            $query->where('status', 1); // Default to active
+        // Filter by status - Show all if not specified
+        $status = $request->input('status');
+        if ($status !== null && $status !== '') {
+            $query->where('status', $status);
         }
 
-        $employers = $query->orderBy('created_at', 'desc')->paginate(20);
+        // Order by latest first (most recent created_at) and paginate with 1000 results per page
+        $employers = $query->orderBy('created_at', 'desc')->paginate(1000);
 
         return view('webapp.employers.index', compact('employers'));
     }
@@ -51,27 +53,52 @@ class EmployerController extends Controller
      */
     public function show($id)
     {
-        $employer = User::with(['employer_profile'])
-            ->where('role_id', 2)
-            ->findOrFail($id);
+        // Load employer with all profile relationships
+        $employer = User::with([
+            'employer_profile.company_country_data',
+            'employer_profile.company_city_data',
+            'employer_profile.company_state_data'
+        ])
+        ->where('role_id', 2)
+        ->findOrFail($id);
 
-        // Get all job ads posted by this employer
+        // Get all job ads posted by this employer with relationships
         $jobs = Job::where('user_id', $id)
             ->where('status', 1)
-            ->with('employer')
+            ->with([
+                'employer.company_country_data',
+                'employer.company_city_data',
+                'employer.company_state_data',
+                'post'
+            ])
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Get resume bookmarks
+        // Get resume bookmarks with user profile relationships
         $bookmarks = ResumeBookmark::where('employer_id', $id)
             ->where('delete_status', 0)
-            ->with('resume_details')
+            ->with([
+                'resume_details.user_profile_info.country_data',
+                'resume_details.user_profile_info.state_data',
+                'resume_details.user_profile_info.city_data',
+                'resume_details.user_profile_info.gender_data',
+                'resume_details.user_profile_info.marital_status_data',
+                'resume_details.user_profile_info.religion_data'
+            ])
             ->get();
 
-        // Get all users who applied to employer's jobs
+        // Get all users who applied to employer's jobs with profile relationships
         $appliedUsers = JobApplicant::whereIn('job_id', $jobs->pluck('id'))
             ->where('status', 1)
-            ->with(['user', 'job'])
+            ->with([
+                'user.user_profile_info.country_data',
+                'user.user_profile_info.state_data',
+                'user.user_profile_info.city_data',
+                'user.user_profile_info.gender_data',
+                'user.user_profile_info.marital_status_data',
+                'user.user_profile_info.religion_data',
+                'job.post'
+            ])
             ->get()
             ->unique('user_id');
 

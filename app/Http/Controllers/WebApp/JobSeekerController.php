@@ -9,6 +9,7 @@ use App\Models\JobBookmark;
 use App\Models\JobApplicant;
 use App\Models\Job;
 use App\Models\Profile;
+use App\Models\Message;
 
 class JobSeekerController extends Controller
 {
@@ -17,31 +18,28 @@ class JobSeekerController extends Controller
      */
     public function index(Request $request)
     {
+        // Start with base query for job seekers (role_id = 1)
         $query = User::where('role_id', 1);
 
-        // Search
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%");
+        // Search by search word (name, email, phone) - Fixed search functionality
+        $searchTerm = trim($request->input('search', ''));
+        if (!empty($searchTerm)) {
+            $searchPattern = '%' . $searchTerm . '%';
+            $query->where(function($q) use ($searchPattern) {
+                $q->where('name', 'LIKE', $searchPattern)
+                  ->orWhere('email', 'LIKE', $searchPattern)
+                  ->orWhere('phone', 'LIKE', $searchPattern);
             });
         }
 
-        // Filter by country
-        if ($request->filled('country_id')) {
-            $query->where('country_id', $request->country_id);
-        }
-
         // Filter by status
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        } else {
-            $query->where('status', 1); // Default to active
+        $status = $request->input('status');
+        if ($status !== null && $status !== '') {
+            $query->where('status', $status);
         }
 
-        $jobSeekers = $query->orderBy('created_at', 'desc')->paginate(20);
+        // Order by latest first (most recent created_at) and paginate with 1000 results per page
+        $jobSeekers = $query->orderBy('created_at', 'desc')->paginate(1000);
 
         return view('webapp.job-seekers.index', compact('jobSeekers'));
     }
@@ -51,9 +49,24 @@ class JobSeekerController extends Controller
      */
     public function show($id)
     {
-        $jobSeeker = User::with(['profile', 'user_skills', 'educations', 'experiences', 'qualifications'])
-            ->where('role_id', 1)
-            ->findOrFail($id);
+        // Load job seeker with all relationships matching mobile app structure
+        $jobSeeker = User::with([
+            'user_profile_info.country_data', 
+            'user_profile_info.state_data', 
+            'user_profile_info.city_data',
+            'user_profile_info.gender_data',
+            'user_profile_info.marital_status_data',
+            'user_profile_info.religion_data',
+            'user_profile_info.user_country',
+            'professional_experiences.country_name',
+            'qualifications.country_name',
+            'job_languages',
+            'user_skills.skillInfo',
+            'user_skills.levelInfo',
+            'user_appreciations'
+        ])
+        ->where('role_id', 1)
+        ->findOrFail($id);
 
         // Get job bookmarks with jobs
         $bookmarkIds = JobBookmark::where('user_id', $id)
@@ -64,9 +77,14 @@ class JobSeekerController extends Controller
             ->where('delete_status', 0)
             ->get();
         
-        // Load jobs separately
+        // Load jobs separately with more relationships
         $jobs = Job::whereIn('id', $bookmarkIds)
-            ->with('employer')
+            ->with([
+                'employer.company_country_data',
+                'employer.company_city_data',
+                'employer.company_state_data',
+                'post'
+            ])
             ->get()
             ->keyBy('id');
         
@@ -84,9 +102,14 @@ class JobSeekerController extends Controller
             ->where('status', 1)
             ->get();
         
-        // Load jobs separately
+        // Load jobs separately with more relationships
         $appliedJobsData = Job::whereIn('id', $appliedJobIds)
-            ->with('employer')
+            ->with([
+                'employer.company_country_data',
+                'employer.company_city_data',
+                'employer.company_state_data',
+                'post'
+            ])
             ->get()
             ->keyBy('id');
         
@@ -143,6 +166,65 @@ class JobSeekerController extends Controller
         $jobSeeker->save();
 
         return redirect()->route('admin.job-seekers.index')->with('success', 'Job seeker deleted successfully.');
+    }
+
+    /**
+     * Show job details with chat thread for a job seeker
+     */
+    public function showJob($jobSeekerId, $jobId)
+    {
+        // Verify job seeker exists
+        $jobSeeker = User::where('role_id', 1)->findOrFail($jobSeekerId);
+        
+        // Load job with all relationships
+        $job = Job::with([
+            'employer.company_country_data',
+            'employer.company_city_data',
+            'employer.company_state_data',
+            'post',
+            'jobPointsDescriptions',
+            'jobPointsRequirements'
+        ])->findOrFail($jobId);
+        
+        // Get chat thread for this job and job seeker
+        // Thread ID format: emp_{employer_id}_user_{job_seeker_id}
+        $employerId = $job->user_id;
+        $threadId = 'emp_' . $employerId . '_user_' . $jobSeekerId;
+        
+        $messages = Message::where('thread_id', $threadId)
+            ->where('message_type', 'chat')
+            ->where('job_id', $jobId)
+            ->with(['sender', 'receiver'])
+            ->orderBy('created_at', 'asc')
+            ->get();
+        
+        // Check if job is bookmarked by this user
+        $isBookmarked = JobBookmark::where('user_id', $jobSeekerId)
+            ->where('job_id', $jobId)
+            ->where('delete_status', 0)
+            ->exists();
+        
+        // Check if job is applied by this user
+        $isApplied = JobApplicant::where('user_id', $jobSeekerId)
+            ->where('job_id', $jobId)
+            ->where('status', 1)
+            ->exists();
+        
+        // Get all applicants for this job with profile relationships
+        $applicants = JobApplicant::where('job_id', $jobId)
+            ->where('status', 1)
+            ->with([
+                'user.user_profile_info.country_data',
+                'user.user_profile_info.state_data',
+                'user.user_profile_info.city_data',
+                'user.user_profile_info.gender_data',
+                'user.user_profile_info.marital_status_data',
+                'user.user_profile_info.religion_data'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return view('webapp.job-seekers.job-details', compact('jobSeeker', 'job', 'messages', 'threadId', 'isBookmarked', 'isApplied', 'applicants'));
     }
 }
 

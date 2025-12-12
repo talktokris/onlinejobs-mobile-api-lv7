@@ -60,6 +60,7 @@ Route::prefix('admin')->namespace('WebApp')->middleware(['auth', 'admin'])->grou
         'update' => 'admin.job-seekers.update',
         'destroy' => 'admin.job-seekers.destroy',
     ]);
+    Route::get('/job-seekers/{jobSeekerId}/jobs/{jobId}', 'JobSeekerController@showJob')->name('admin.job-seekers.jobs.show');
     
     // Employers
     Route::resource('employers', 'EmployerController')->names([

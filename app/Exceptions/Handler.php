@@ -50,12 +50,17 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Throwable $exception)
     {
-        // Handle AuthenticationException for API requests
+        // Handle AuthenticationException
         if ($exception instanceof \Illuminate\Auth\AuthenticationException) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
                     'message' => 'Unauthenticated.'
                 ], 401);
+            }
+            
+            // Redirect admin routes to admin login
+            if ($request->is('admin/*')) {
+                return redirect()->route('admin.login');
             }
         }
         

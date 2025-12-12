@@ -19,6 +19,16 @@ class JobApplicant extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function job()
+    {
+        return $this->belongsTo(Job::class, 'job_id');
+    }
+
     public function applicantProfile()
     {
         return $this->hasOne(Profile::class, 'user_id', 'user_id');

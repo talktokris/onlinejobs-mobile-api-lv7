@@ -16,29 +16,33 @@ class JobController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Job::with(['employer', 'user']);
+        // Start with base query for jobs with relationships
+        $query = Job::with([
+            'employer.company_country_data',
+            'employer.company_city_data',
+            'employer.company_state_data',
+            'post'
+        ]);
 
-        // Search
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('position', 'like', "%{$search}%")
-                  ->orWhereHas('employer', function($q) use ($search) {
-                      $q->where('company_name', 'like', "%{$search}%");
+        // Search by search word (position, company name) - Fixed search functionality
+        $searchTerm = trim($request->input('search', ''));
+        if (!empty($searchTerm)) {
+            $searchPattern = '%' . $searchTerm . '%';
+            $query->where(function($q) use ($searchPattern) {
+                $q->where('position', 'LIKE', $searchPattern)
+                  ->orWhereHas('post', function($q) use ($searchPattern) {
+                      $q->where('name', 'LIKE', $searchPattern);
+                  })
+                  ->orWhereHas('employer', function($q) use ($searchPattern) {
+                      $q->where('company_name', 'LIKE', $searchPattern);
                   });
             });
         }
 
-        // Filter by employer
-        if ($request->filled('employer_id')) {
-            $query->where('user_id', $request->employer_id);
-        }
-
-        // Filter by status
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        } else {
-            $query->where('status', 1); // Default to active
+        // Filter by status - Show all if not specified
+        $status = $request->input('status');
+        if ($status !== null && $status !== '') {
+            $query->where('status', $status);
         }
 
         // Filter by closing date
@@ -46,7 +50,8 @@ class JobController extends Controller
             $query->whereDate('closing_date', $request->closing_date);
         }
 
-        $jobs = $query->orderBy('created_at', 'desc')->paginate(20);
+        // Order by latest first and paginate with 1000 results per page
+        $jobs = $query->orderBy('created_at', 'desc')->paginate(1000);
 
         return view('webapp.jobs.index', compact('jobs'));
     }

@@ -52,7 +52,14 @@ class SettingsController extends Controller
         }
 
         $modelClass = $this->categoryMap[$category];
-        $items = $modelClass::where('status', 1)->orderBy('id', 'desc')->paginate(20);
+        
+        // For countries and options, show all status values (active and inactive)
+        // For other categories, only show active items
+        if ($category === 'countries' || $category === 'options') {
+            $items = $modelClass::orderBy('id', 'desc')->paginate(20);
+        } else {
+            $items = $modelClass::where('status', 1)->orderBy('id', 'desc')->paginate(20);
+        }
 
         $categoryName = $this->getCategoryName($category);
 
@@ -69,8 +76,20 @@ class SettingsController extends Controller
         }
 
         $categoryName = $this->getCategoryName($category);
+        
+        // Get distinct type values for options category
+        $distinctTypes = [];
+        if ($category === 'options') {
+            $distinctTypes = Option::select('type')
+                ->distinct()
+                ->whereNotNull('type')
+                ->where('type', '!=', '')
+                ->orderBy('type', 'asc')
+                ->pluck('type')
+                ->toArray();
+        }
 
-        return view('webapp.settings.create', compact('category', 'categoryName'));
+        return view('webapp.settings.create', compact('category', 'categoryName', 'distinctTypes'));
     }
 
     /**
@@ -84,16 +103,40 @@ class SettingsController extends Controller
 
         $modelClass = $this->categoryMap[$category];
 
-        $request->validate([
+        $validationRules = [
             'name' => 'required|string|max:255',
-        ]);
+            'status' => 'required|in:0,1',
+        ];
+
+        // Add code validation for countries
+        if ($category === 'countries') {
+            $validationRules['code'] = 'nullable|string|max:3';
+        }
+
+        // Add type validation for options
+        if ($category === 'options') {
+            $validationRules['type'] = 'required|string|max:255';
+        }
+
+        $request->validate($validationRules);
 
         // Determine the name field based on model
         $nameField = $this->getNameField($category);
 
         $item = new $modelClass();
         $item->$nameField = $request->name;
-        $item->status = 1;
+        
+        // Add code for countries
+        if ($category === 'countries' && $request->has('code')) {
+            $item->code = strtoupper($request->code);
+        }
+        
+        // Add type for options
+        if ($category === 'options' && $request->has('type')) {
+            $item->type = $request->type;
+        }
+        
+        $item->status = $request->status;
         $item->save();
 
         return redirect()->route('admin.settings.category', $category)->with('success', 'Item created successfully.');
@@ -113,8 +156,20 @@ class SettingsController extends Controller
 
         $categoryName = $this->getCategoryName($category);
         $nameField = $this->getNameField($category);
+        
+        // Get distinct type values for options category
+        $distinctTypes = [];
+        if ($category === 'options') {
+            $distinctTypes = Option::select('type')
+                ->distinct()
+                ->whereNotNull('type')
+                ->where('type', '!=', '')
+                ->orderBy('type', 'asc')
+                ->pluck('type')
+                ->toArray();
+        }
 
-        return view('webapp.settings.edit', compact('item', 'category', 'categoryName', 'nameField'));
+        return view('webapp.settings.edit', compact('item', 'category', 'categoryName', 'nameField', 'distinctTypes'));
     }
 
     /**
@@ -129,19 +184,46 @@ class SettingsController extends Controller
         $modelClass = $this->categoryMap[$category];
         $item = $modelClass::findOrFail($id);
 
-        $request->validate([
+        $validationRules = [
             'name' => 'required|string|max:255',
-        ]);
+            'status' => 'required|in:0,1',
+        ];
+
+        // Add code validation for countries
+        if ($category === 'countries') {
+            $validationRules['code'] = 'nullable|string|max:3';
+        }
+
+        // Add type validation for options
+        if ($category === 'options') {
+            $validationRules['type'] = 'required|string|max:255';
+        }
+
+        $request->validate($validationRules);
 
         $nameField = $this->getNameField($category);
         $item->$nameField = $request->name;
+        
+        // Update code for countries
+        if ($category === 'countries' && $request->has('code')) {
+            $item->code = strtoupper($request->code);
+        }
+        
+        // Update type for options
+        if ($category === 'options' && $request->has('type')) {
+            $item->type = $request->type;
+        }
+        
+        $item->status = $request->status;
         $item->save();
 
         return redirect()->route('admin.settings.category', $category)->with('success', 'Item updated successfully.');
     }
 
     /**
-     * Delete item (soft delete)
+     * Delete item
+     * For countries: hard delete (permanently remove from database)
+     * For other categories: soft delete (set status to 0)
      */
     public function destroyItem($category, $id)
     {
@@ -151,8 +233,15 @@ class SettingsController extends Controller
 
         $modelClass = $this->categoryMap[$category];
         $item = $modelClass::findOrFail($id);
-        $item->status = 0;
-        $item->save();
+        
+        // For countries, permanently delete the record so it disappears from the list
+        // For other categories, use soft delete (set status to 0)
+        if ($category === 'countries') {
+            $item->delete(); // Hard delete - permanently removes from database
+        } else {
+            $item->status = 0;
+            $item->save(); // Soft delete - sets status to 0
+        }
 
         return redirect()->route('admin.settings.category', $category)->with('success', 'Item deleted successfully.');
     }
