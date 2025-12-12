@@ -160,6 +160,39 @@ class JobController extends Controller
     }
 
     /**
+     * Show change status form
+     */
+    public function showChangeStatus($jobId)
+    {
+        $job = Job::with([
+            'employer.company_country_data',
+            'employer.company_city_data',
+            'employer.company_state_data',
+            'post'
+        ])->findOrFail($jobId);
+        
+        return view('webapp.jobs.change-status', compact('job'));
+    }
+
+    /**
+     * Update job status
+     */
+    public function updateStatus(Request $request, $jobId)
+    {
+        $request->validate([
+            'status' => 'required|in:0,1',
+            'publish_status' => 'required|in:0,1',
+        ]);
+
+        $job = Job::findOrFail($jobId);
+        $job->status = $request->status;
+        $job->publish_status = $request->publish_status;
+        $job->save();
+
+        return redirect()->route('admin.jobs.details', $jobId)->with('success', 'Job status updated successfully.');
+    }
+
+    /**
      * Show applicant details with messages
      */
     public function showApplicant($jobId, $applicantId)

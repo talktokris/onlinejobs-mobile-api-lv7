@@ -82,6 +82,8 @@ Route::prefix('admin')->namespace('WebApp')->middleware(['auth', 'admin'])->grou
         'destroy' => 'admin.jobs.destroy',
     ]);
     Route::get('/jobs/{jobId}/details', 'JobController@showDetails')->name('admin.jobs.details');
+    Route::get('/jobs/{jobId}/change-status', 'JobController@showChangeStatus')->name('admin.jobs.change-status');
+    Route::post('/jobs/{jobId}/change-status', 'JobController@updateStatus')->name('admin.jobs.update-status');
     Route::get('/jobs/{jobId}/applicants/{applicantId}', 'JobController@showApplicant')->name('admin.jobs.applicants.show');
     
     // Settings

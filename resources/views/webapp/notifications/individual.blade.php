@@ -147,6 +147,9 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
                             </svg>
                         </div>
+                        @php
+                            $individualTitleBorderClass = $errors->has('title') ? 'border-red-500' : 'border-gray-200';
+                        @endphp
                         <input type="text" 
                                name="title" 
                                id="individual_title" 
@@ -154,7 +157,7 @@
                                maxlength="255"
                                value="{{ old('title') }}"
                                placeholder="Enter notification title..."
-                               class="block w-full pl-12 pr-20 py-3.5 border-2 border-gray-200 rounded-lg shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm bg-white hover:border-gray-300 @error('title') border-red-500 @enderror">
+                               class="block w-full pl-12 pr-20 py-3.5 border-2 {{ $individualTitleBorderClass }} rounded-lg shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm bg-white hover:border-gray-300">
                         <div class="absolute inset-y-0 right-0 pr-3 flex items-center">
                             <span class="text-xs text-gray-400" id="individual_title_counter">0/255</span>
                         </div>
@@ -173,13 +176,16 @@
                         Message
                     </label>
                     <div class="relative">
+                        @php
+                            $individualMessageBorderClass = $errors->has('message') ? 'border-red-500' : 'border-gray-200';
+                        @endphp
                         <textarea name="message" 
                                   id="individual_message" 
                                   rows="6" 
                                   required 
                                   maxlength="1000"
                                   placeholder="Enter notification message..."
-                                  class="block w-full px-4 py-3.5 pb-12 border-2 border-gray-200 rounded-lg shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm bg-white hover:border-gray-300 resize-y @error('message') border-red-500 @enderror">{{ old('message') }}</textarea>
+                                  class="block w-full px-4 py-3.5 pb-12 border-2 {{ $individualMessageBorderClass }} rounded-lg shadow-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all duration-200 text-sm bg-white hover:border-gray-300 resize-y">{{ old('message') }}</textarea>
                         <div class="absolute bottom-3 right-3">
                             <span class="text-xs text-gray-400" id="individual_message_counter">0/1000</span>
                         </div>
