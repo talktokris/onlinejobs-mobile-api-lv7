@@ -122,51 +122,153 @@
         </form>
     </div>
 
-    <!-- Job Seekers List -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-                @forelse($jobSeekers as $jobSeeker)
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-medium text-gray-900">{{ $jobSeeker->name ?? 'N/A' }}</div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm text-gray-500">{{ $jobSeeker->email ?? 'N/A' }}</div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm text-gray-500">{{ $jobSeeker->phone ?? 'N/A' }}</div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $jobSeeker->status == 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' }}">
-                                {{ $jobSeeker->status == 1 ? 'Active' : 'Inactive' }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ $jobSeeker->created_at->format('M d, Y') }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <a href="{{ route('admin.job-seekers.show', $jobSeeker->id) }}" class="text-blue-600 hover:text-blue-900">View</a>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="6" class="px-6 py-4 text-center text-sm text-gray-500">No job seekers found</td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
+    <!-- Job Seekers List - Card Design -->
+    @if($jobSeekers->count() > 0)
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        @foreach($jobSeekers as $jobSeeker)
+            @php
+                $profile = $jobSeeker->user_profile_info;
+                $userImage = null;
+                if ($profile && $profile->image) {
+                    $imagePath = public_path('assets/user_images/' . $jobSeeker->id . '/' . $profile->image);
+                    if (file_exists($imagePath)) {
+                        $userImage = asset('assets/user_images/' . $jobSeeker->id . '/' . $profile->image);
+                    }
+                }
+                
+                // Check if bookmarked (check if any employer has bookmarked this resume)
+                $isBookmarked = \App\Models\ResumeBookmark::where('user_id', $jobSeeker->id)
+                    ->where('delete_status', 0)
+                    ->exists();
+                
+                // Get latest bookmark date if exists
+                $latestBookmark = \App\Models\ResumeBookmark::where('user_id', $jobSeeker->id)
+                    ->where('delete_status', 0)
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                
+                // Format height
+                $heightDisplay = 'N/A';
+                if ($profile && $profile->height) {
+                    $heightParts = explode('.', $profile->height);
+                    $heightDisplay = count($heightParts) === 2 ? $heightParts[0] . "'" . $heightParts[1] . '"' : $profile->height;
+                }
+            @endphp
+            <a href="{{ route('admin.job-seekers.show', $jobSeeker->id) }}" class="block bg-white rounded-lg shadow-md hover:shadow-lg transition duration-200 p-4 border border-gray-200 cursor-pointer">
+                <!-- Profile Image and Name Section -->
+                <div class="flex items-start mb-3">
+                    @if($userImage)
+                        <img src="{{ $userImage }}" alt="Profile" class="w-16 h-16 rounded-full object-cover border-2 border-gray-200 mr-3 flex-shrink-0">
+                    @else
+                        <div class="w-16 h-16 rounded-full bg-gray-200 border-2 border-gray-300 flex items-center justify-center mr-3 flex-shrink-0">
+                            <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                        </div>
+                    @endif
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-bold text-gray-900 text-base mb-1 truncate">{{ $jobSeeker->name ?? 'N/A' }}</h3>
+                        @if($isBookmarked)
+                        <span class="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded">
+                            Bookmarked
+                        </span>
+                        @endif
+                    </div>
+                </div>
+
+                <!-- Personal Information - Two Columns -->
+                @if($profile)
+                <div class="grid grid-cols-2 gap-2 text-xs mb-3">
+                    <!-- Left Column -->
+                    <div class="space-y-2">
+                        @if($profile->date_of_birth)
+                        <div>
+                            <span class="font-semibold text-gray-700">Date of Birth:</span>
+                            <span class="text-gray-900 ml-1">{{ $profile->date_of_birth }}</span>
+                        </div>
+                        @endif
+                        @if($profile->marital_status_data && $profile->marital_status_data->name)
+                        <div>
+                            <span class="font-semibold text-gray-700">Marital Status:</span>
+                            <span class="text-gray-900 ml-1">{{ $profile->marital_status_data->name }}</span>
+                        </div>
+                        @endif
+                        @if($profile->weight)
+                        <div>
+                            <span class="font-semibold text-gray-700">Weight:</span>
+                            <span class="text-gray-900 ml-1">{{ $profile->weight }}</span>
+                        </div>
+                        @endif
+                        @if($profile->country_data && $profile->country_data->name)
+                        <div>
+                            <span class="font-semibold text-gray-700">Country:</span>
+                            <span class="text-gray-900 ml-1">{{ $profile->country_data->name }}</span>
+                        </div>
+                        @endif
+                    </div>
+                    <!-- Right Column -->
+                    <div class="space-y-2">
+                        @if($profile->gender_data && $profile->gender_data->name)
+                        <div>
+                            <span class="font-semibold text-gray-700">Gender:</span>
+                            <span class="text-gray-900 ml-1">{{ $profile->gender_data->name }}</span>
+                        </div>
+                        @endif
+                        @if($profile->religion_data && $profile->religion_data->name)
+                        <div>
+                            <span class="font-semibold text-gray-700">Religion:</span>
+                            <span class="text-gray-900 ml-1">{{ $profile->religion_data->name }}</span>
+                        </div>
+                        @endif
+                        @if($profile->height)
+                        <div>
+                            <span class="font-semibold text-gray-700">Height:</span>
+                            <span class="text-gray-900 ml-1">{{ $heightDisplay }}</span>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+                @endif
+
+                <!-- Contact Information -->
+                <div class="mt-3 pt-3 border-t border-gray-200 space-y-1">
+                    @if($profile && $profile->email)
+                    <div class="text-xs">
+                        <span class="font-semibold text-gray-700">Email:</span>
+                        <span class="text-gray-900 ml-1">{{ $profile->email }}</span>
+                    </div>
+                    @elseif($jobSeeker->email)
+                    <div class="text-xs">
+                        <span class="font-semibold text-gray-700">Email:</span>
+                        <span class="text-gray-900 ml-1">{{ $jobSeeker->email }}</span>
+                    </div>
+                    @endif
+                    @if($profile && $profile->phone)
+                    <div class="text-xs">
+                        <span class="font-semibold text-gray-700">Phone No:</span>
+                        <span class="text-gray-900 ml-1">{{ $profile->phone }}</span>
+                    </div>
+                    @elseif($jobSeeker->phone)
+                    <div class="text-xs">
+                        <span class="font-semibold text-gray-700">Phone No:</span>
+                        <span class="text-gray-900 ml-1">{{ $jobSeeker->phone }}</span>
+                    </div>
+                    @endif
+                    @if($latestBookmark)
+                    <div class="text-xs">
+                        <span class="font-semibold text-gray-700">Bookmarked:</span>
+                        <span class="text-gray-900 ml-1">{{ $latestBookmark->created_at->format('M d, Y') }}</span>
+                    </div>
+                    @endif
+                </div>
+            </a>
+        @endforeach
     </div>
+    @else
+    <div class="bg-white rounded-lg shadow p-8 text-center">
+        <p class="text-gray-500 text-lg">No job seekers found</p>
+    </div>
+    @endif
 
     <!-- Pagination -->
     @if($jobSeekers->hasPages())

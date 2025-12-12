@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\ExpoPushNotificationService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class NotificationController extends Controller
 {
@@ -18,11 +19,27 @@ class NotificationController extends Controller
     }
 
     /**
-     * Display notification sending interface
+     * Display notification sending interface (redirects to blast)
      */
     public function index()
     {
-        return view('webapp.notifications.index');
+        return redirect()->route('admin.notifications.show-blast');
+    }
+
+    /**
+     * Display blast notification page
+     */
+    public function showBlast()
+    {
+        return view('webapp.notifications.blast');
+    }
+
+    /**
+     * Display individual notification page
+     */
+    public function showIndividual()
+    {
+        return view('webapp.notifications.individual');
     }
 
     /**
@@ -30,26 +47,48 @@ class NotificationController extends Controller
      */
     public function searchUsers(Request $request)
     {
-        $request->validate([
-            'type' => 'required|in:employer,job_seeker',
-            'query' => 'required|string|min:2',
-        ]);
+        try {
+            $request->validate([
+                'type' => 'required|in:employer,job_seeker',
+                'query' => 'required|string|min:2',
+            ]);
 
-        $roleId = $request->type === 'employer' ? 2 : 1;
+            $roleId = $request->type === 'employer' ? 2 : 1;
+            $searchTerm = trim($request->input('query', ''));
 
-        $users = User::where('role_id', $roleId)
-            ->where('status', 1)
-            ->where(function($query) use ($request) {
-                $query->where('name', 'like', "%{$request->query}%")
-                      ->orWhere('email', 'like', "%{$request->query}%")
-                      ->orWhere('phone', 'like', "%{$request->query}%");
-            })
-            ->whereNotNull('expo_push_token')
-            ->where('expo_push_token', '!=', '')
-            ->limit(20)
-            ->get(['id', 'name', 'email', 'phone', 'expo_push_token']);
+            // Remove any non-numeric characters from search term for phone search
+            $numericSearch = preg_replace('/[^0-9]/', '', $searchTerm);
 
-        return response()->json($users);
+            $users = User::where('role_id', $roleId)
+                ->where(function($query) use ($searchTerm, $numericSearch) {
+                    $query->where('name', 'LIKE', "%{$searchTerm}%")
+                          ->orWhere('email', 'LIKE', "%{$searchTerm}%");
+                    
+                    // Search phone with both original and numeric-only versions
+                    if (!empty($numericSearch)) {
+                        $query->orWhere('phone', 'LIKE', "%{$numericSearch}%");
+                    }
+                    if ($numericSearch !== $searchTerm) {
+                        $query->orWhere('phone', 'LIKE', "%{$searchTerm}%");
+                    }
+                })
+                ->orderBy('name', 'asc')
+                ->limit(20)
+                ->get(['id', 'name', 'email', 'phone', 'expo_push_token', 'device_id']);
+
+            return response()->json($users);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'messages' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('User search error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'An error occurred while searching users',
+                'message' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -80,7 +119,7 @@ class NotificationController extends Controller
             ->get();
 
         if ($users->isEmpty()) {
-            return back()->withErrors(['message' => 'No users with valid push tokens found.']);
+            return redirect()->route('admin.notifications.show-blast')->withErrors(['message' => 'No users with valid push tokens found.']);
         }
 
         // Extract tokens
@@ -104,7 +143,7 @@ class NotificationController extends Controller
                 $failCount += count($batch);
                 Log::error('Blast notification batch failed', [
                     'batch_size' => count($batch),
-                    'error' => $result['message']
+                    'error' => $result['message'] ?? 'Unknown error'
                 ]);
             }
         }
@@ -114,7 +153,7 @@ class NotificationController extends Controller
             $message .= ", {$failCount} failed";
         }
 
-        return back()->with('success', $message);
+        return redirect()->route('admin.notifications.show-blast')->with('success', $message);
     }
 
     /**
@@ -130,8 +169,15 @@ class NotificationController extends Controller
 
         $user = User::findOrFail($request->user_id);
 
+        // Check if user has push token
         if (empty($user->expo_push_token)) {
-            return back()->withErrors(['message' => 'User does not have a valid push token.']);
+            $errorMessage = 'User does not have a valid push token. ';
+            if ($user->device_id) {
+                $errorMessage .= 'The user has a device ID (' . $user->device_id . ') but the push token has not been registered yet. The user needs to open the mobile app and grant notification permissions to receive push notifications.';
+            } else {
+                $errorMessage .= 'The user needs to open the mobile app and register for push notifications to receive them.';
+            }
+            return redirect()->route('admin.notifications.show-individual')->withErrors(['message' => $errorMessage]);
         }
 
         $result = $this->expoService->sendToToken(
@@ -141,9 +187,9 @@ class NotificationController extends Controller
         );
 
         if ($result['success']) {
-            return back()->with('success', 'Notification sent successfully to ' . ($user->name ?? 'User'));
+            return redirect()->route('admin.notifications.show-individual')->with('success', 'Notification sent successfully to ' . ($user->name ?? 'User'));
         } else {
-            return back()->withErrors(['message' => 'Failed to send notification: ' . $result['message']]);
+            return redirect()->route('admin.notifications.show-individual')->withErrors(['message' => 'Failed to send notification: ' . $result['message']]);
         }
     }
 }

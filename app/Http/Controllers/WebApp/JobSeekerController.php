@@ -10,6 +10,7 @@ use App\Models\JobApplicant;
 use App\Models\Job;
 use App\Models\Profile;
 use App\Models\Message;
+use App\Models\ResumeBookmark;
 
 class JobSeekerController extends Controller
 {
@@ -37,6 +38,19 @@ class JobSeekerController extends Controller
         if ($status !== null && $status !== '') {
             $query->where('status', $status);
         }
+
+        // Eager load relationships for card display
+        $query->with([
+            'user_profile_info.gender_data',
+            'user_profile_info.marital_status_data',
+            'user_profile_info.religion_data',
+            'user_profile_info.country_data',
+            'resume_bookmarks' => function($q) {
+                $q->where('delete_status', 0)
+                  ->orderBy('created_at', 'desc')
+                  ->limit(1);
+            }
+        ]);
 
         // Order by latest first (most recent created_at) and paginate with 1000 results per page
         $jobSeekers = $query->orderBy('created_at', 'desc')->paginate(1000);

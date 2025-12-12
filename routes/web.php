@@ -97,7 +97,9 @@ Route::prefix('admin')->namespace('WebApp')->middleware(['auth', 'admin'])->grou
     
     // Notifications
     Route::get('/notifications', 'NotificationController@index')->name('admin.notifications.index');
+    Route::get('/notifications/blast', 'NotificationController@showBlast')->name('admin.notifications.show-blast');
     Route::post('/notifications/blast', 'NotificationController@sendBlast')->name('admin.notifications.blast');
+    Route::get('/notifications/individual', 'NotificationController@showIndividual')->name('admin.notifications.show-individual');
     Route::post('/notifications/individual', 'NotificationController@sendIndividual')->name('admin.notifications.individual');
     Route::get('/notifications/search-users', 'NotificationController@searchUsers')->name('admin.notifications.search-users');
     
