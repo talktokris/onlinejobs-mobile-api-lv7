@@ -72,6 +72,8 @@ Route::prefix('admin')->namespace('WebApp')->middleware(['auth', 'admin'])->grou
     ]);
     Route::get('/employers/{employerId}/jobs/{jobId}', 'EmployerController@showJob')->name('admin.employers.jobs.show');
     Route::get('/employers/{employerId}/jobs/{jobId}/applicants/{applicantId}', 'EmployerController@showApplicant')->name('admin.employers.jobs.applicants.show');
+    Route::get('/employers/{employerId}/jobs/{jobId}/change-publish', 'EmployerController@showChangePublish')->name('admin.employers.jobs.change-publish');
+    Route::post('/employers/{employerId}/jobs/{jobId}/change-publish', 'EmployerController@updatePublish')->name('admin.employers.jobs.update-publish');
     
     // Jobs
     Route::resource('jobs', 'JobController')->names([

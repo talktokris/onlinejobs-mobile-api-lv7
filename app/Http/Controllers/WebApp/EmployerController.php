@@ -190,23 +190,64 @@ class EmployerController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,' . $id,
             'phone' => 'nullable|string|max:20',
+            'company_name' => 'nullable|string|max:255',
             'status' => 'required|in:0,1',
         ]);
 
-        $employer->name = $request->name;
-        $employer->email = $request->email;
-        $employer->phone = $request->phone;
+        // Update user fields
+        $employer->name = trim($request->name);
+        $employer->email = trim($request->email);
+        $employer->phone = $request->phone ? trim($request->phone) : null;
         $employer->status = $request->status;
         $employer->save();
 
-        // Update employer profile if company name is provided
-        if ($request->filled('company_name')) {
-            $profile = EmployerProfile::firstOrNew(['user_id' => $id]);
-            $profile->company_name = $request->company_name;
-            $profile->save();
-        }
+        // Update or create employer profile
+        $profile = EmployerProfile::firstOrNew(['user_id' => $id]);
+        $profile->company_name = $request->company_name ? trim($request->company_name) : null;
+        $profile->save();
 
         return redirect()->route('admin.employers.show', $id)->with('success', 'Employer updated successfully.');
+    }
+
+    /**
+     * Show the form for changing job publish status from employer page
+     */
+    public function showChangePublish($employerId, $jobId)
+    {
+        $employer = User::with([
+            'employer_profile.company_country_data',
+            'employer_profile.company_city_data',
+            'employer_profile.company_state_data'
+        ])
+            ->where('role_id', 2)
+            ->findOrFail($employerId);
+            
+        $job = Job::where('id', $jobId)
+            ->where('user_id', $employerId)
+            ->with(['post'])
+            ->firstOrFail();
+        
+        return view('webapp.employers.change-publish', compact('employer', 'job'));
+    }
+
+    /**
+     * Update job publish status from employer page
+     */
+    public function updatePublish(Request $request, $employerId, $jobId)
+    {
+        $employer = User::where('role_id', 2)->findOrFail($employerId);
+        $job = Job::where('id', $jobId)
+            ->where('user_id', $employerId)
+            ->firstOrFail();
+
+        $request->validate([
+            'publish_status' => 'required|in:0,1',
+        ]);
+
+        $job->publish_status = $request->publish_status;
+        $job->save();
+
+        return redirect()->route('admin.employers.show', $employerId)->with('success', 'Job publish status updated successfully.');
     }
 
     /**

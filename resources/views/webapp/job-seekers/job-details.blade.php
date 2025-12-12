@@ -7,7 +7,7 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div class="flex items-center">
-            <a href="{{ route('admin.job-seekers.show', $jobSeeker->id) }}" class="mr-3 text-gray-600 hover:text-gray-900">
+            <a href="{{ route('admin.employers.show', $job->user_id) }}" class="mr-3 text-gray-600 hover:text-gray-900">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                 </svg>
