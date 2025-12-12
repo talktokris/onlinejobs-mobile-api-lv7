@@ -8,6 +8,7 @@ use App\Models\Job;
 use App\Models\JobApplicant;
 use App\Models\Message;
 use App\Models\User;
+use App\Models\JobBookmark;
 
 class JobController extends Controller
 {
@@ -24,13 +25,12 @@ class JobController extends Controller
             'post'
         ]);
 
-        // Search by search word (position, company name) - Fixed search functionality
+        // Search by search word (position through post relationship, company name) - Fixed search functionality
         $searchTerm = trim($request->input('search', ''));
         if (!empty($searchTerm)) {
             $searchPattern = '%' . $searchTerm . '%';
             $query->where(function($q) use ($searchPattern) {
-                $q->where('position', 'LIKE', $searchPattern)
-                  ->orWhereHas('post', function($q) use ($searchPattern) {
+                $q->whereHas('post', function($q) use ($searchPattern) {
                       $q->where('name', 'LIKE', $searchPattern);
                   })
                   ->orWhereHas('employer', function($q) use ($searchPattern) {
@@ -43,6 +43,12 @@ class JobController extends Controller
         $status = $request->input('status');
         if ($status !== null && $status !== '') {
             $query->where('status', $status);
+        }
+
+        // Filter by publish status
+        $publishStatus = $request->input('publish_status');
+        if ($publishStatus !== null && $publishStatus !== '') {
+            $query->where('publish_status', $publishStatus);
         }
 
         // Filter by closing date
@@ -74,6 +80,83 @@ class JobController extends Controller
             ->get();
 
         return view('webapp.jobs.show', compact('job', 'employer', 'applicants'));
+    }
+
+    /**
+     * Show job details from jobs search page (clone of job seeker job details)
+     */
+    public function showDetails($jobId)
+    {
+        // Load job with all relationships
+        $job = Job::with([
+            'employer.company_country_data',
+            'employer.company_city_data',
+            'employer.company_state_data',
+            'post',
+            'jobPointsDescriptions',
+            'jobPointsRequirements'
+        ])->findOrFail($jobId);
+        
+        // Find any job seeker for chat thread context
+        // First try to find one who bookmarked this job
+        $bookmark = JobBookmark::where('job_id', $jobId)
+            ->where('delete_status', 0)
+            ->first();
+        $jobSeeker = null;
+        if ($bookmark) {
+            $jobSeeker = User::where('role_id', 1)->find($bookmark->user_id);
+        }
+        // If still no job seeker found, get any job seeker
+        if (!$jobSeeker) {
+            $jobSeeker = User::where('role_id', 1)->first();
+        }
+        
+        // Get chat thread if we have a job seeker
+        $messages = collect([]);
+        $threadId = null;
+        $isBookmarked = false;
+        $isApplied = false;
+        
+        if ($jobSeeker) {
+            $actualJobSeekerId = $jobSeeker->id;
+            $employerId = $job->user_id;
+            $threadId = 'emp_' . $employerId . '_user_' . $actualJobSeekerId;
+            
+            $messages = Message::where('thread_id', $threadId)
+                ->where('message_type', 'chat')
+                ->where('job_id', $jobId)
+                ->with(['sender', 'receiver'])
+                ->orderBy('created_at', 'asc')
+                ->get();
+            
+            // Check if job is bookmarked by this user
+            $isBookmarked = JobBookmark::where('user_id', $actualJobSeekerId)
+                ->where('job_id', $jobId)
+                ->where('delete_status', 0)
+                ->exists();
+            
+            // Check if job is applied by this user
+            $isApplied = JobApplicant::where('user_id', $actualJobSeekerId)
+                ->where('job_id', $jobId)
+                ->where('status', 1)
+                ->exists();
+        }
+        
+        // Get all applicants for this job with profile relationships
+        $applicants = JobApplicant::where('job_id', $jobId)
+            ->where('status', 1)
+            ->with([
+                'user.user_profile_info.country_data',
+                'user.user_profile_info.state_data',
+                'user.user_profile_info.city_data',
+                'user.user_profile_info.gender_data',
+                'user.user_profile_info.marital_status_data',
+                'user.user_profile_info.religion_data'
+            ])
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return view('webapp.jobs.details', compact('jobSeeker', 'job', 'messages', 'threadId', 'isBookmarked', 'isApplied', 'applicants'));
     }
 
     /**

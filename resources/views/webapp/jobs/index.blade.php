@@ -34,7 +34,7 @@
         </div>
         
         <form method="GET" action="{{ route('admin.jobs.index') }}" id="searchForm" class="space-y-5">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
                 <!-- Search Word Input -->
                 <div class="md:col-span-2">
                     <label for="search" class="block text-sm font-semibold text-gray-700 mb-2">
@@ -98,11 +98,46 @@
                         Filter by active or inactive status
                     </p>
                 </div>
+
+                <!-- Publish Status Dropdown -->
+                <div>
+                    <label for="publish_status" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        Publish Status
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <select name="publish_status" 
+                                id="publish_status" 
+                                class="block w-full pl-12 pr-10 py-3.5 border-2 border-gray-200 rounded-lg shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 text-sm bg-white hover:border-gray-300 appearance-none cursor-pointer">
+                            <option value="">All</option>
+                            <option value="1" {{ request('publish_status') == '1' ? 'selected' : '' }}>Published</option>
+                            <option value="0" {{ request('publish_status') == '0' ? 'selected' : '' }}>Draft</option>
+                        </select>
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <p class="mt-2 text-xs text-gray-500 flex items-center">
+                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                        </svg>
+                        Filter by published or draft status
+                    </p>
+                </div>
             </div>
             
             <!-- Action Buttons -->
             <div class="flex items-center justify-end space-x-3 pt-4 border-t border-blue-200">
-                @if(request()->anyFilled(['search', 'status', 'closing_date']))
+                @if(request()->anyFilled(['search', 'status', 'publish_status', 'closing_date']))
                 <a href="{{ route('admin.jobs.index') }}" 
                    class="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-300 transition-all duration-200 font-medium shadow-sm border border-gray-200 flex items-center">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -157,16 +192,24 @@
                         $postedDate = $job->created_at ? $job->created_at->diffForHumans() : 'N/A';
                         $closingDate = $job->closing_date ? $job->closing_date->format('Y-m-d') : 'N/A';
                         $applicantsCount = \App\Models\JobApplicant::where('job_id', $job->id)->where('status', 1)->count();
-                        // Get first applicant's user_id for navigation, or use a default
+                        // Get job seeker ID for navigation
+                        // Priority: 1) First applicant, 2) First bookmark, 3) Any job seeker
+                        $jobSeekerId = null;
                         $firstApplicant = \App\Models\JobApplicant::where('job_id', $job->id)->where('status', 1)->first();
                         if ($firstApplicant) {
                             $jobSeekerId = $firstApplicant->user_id;
                         } else {
                             $bookmark = \App\Models\JobBookmark::where('job_id', $job->id)->where('delete_status', 0)->first();
-                            $jobSeekerId = $bookmark ? $bookmark->user_id : 1;
+                            if ($bookmark) {
+                                $jobSeekerId = $bookmark->user_id;
+                            } else {
+                                // Get any job seeker (role_id = 1)
+                                $anyJobSeeker = \App\Models\User::where('role_id', 1)->first();
+                                $jobSeekerId = $anyJobSeeker ? $anyJobSeeker->id : 1;
+                            }
                         }
                     @endphp
-                    <a href="{{ route('admin.job-seekers.jobs.show', [$jobSeekerId, $job->id]) }}" class="block bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg shadow-md hover:shadow-lg transition duration-200 p-4 border border-orange-200 relative">
+                    <a href="{{ route('admin.jobs.details', $job->id) }}" class="block bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg shadow-md hover:shadow-lg transition duration-200 p-4 border border-orange-200 relative">
                         <!-- Status Badge -->
                         @if($job->status == 1)
                         <div class="absolute top-3 right-3 flex items-center">
@@ -317,13 +360,15 @@
     <style>
         /* Enhanced input focus effects */
         #search:focus,
-        #status:focus {
+        #status:focus,
+        #publish_status:focus {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
         }
         
         /* Custom select arrow */
-        #status {
+        #status,
+        #publish_status {
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
             background-position: right 0.75rem center;
             background-repeat: no-repeat;

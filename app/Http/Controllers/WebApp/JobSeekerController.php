@@ -173,10 +173,7 @@ class JobSeekerController extends Controller
      */
     public function showJob($jobSeekerId, $jobId)
     {
-        // Verify job seeker exists
-        $jobSeeker = User::where('role_id', 1)->findOrFail($jobSeekerId);
-        
-        // Load job with all relationships
+        // Load job first to ensure it exists
         $job = Job::with([
             'employer.company_country_data',
             'employer.company_city_data',
@@ -186,10 +183,34 @@ class JobSeekerController extends Controller
             'jobPointsRequirements'
         ])->findOrFail($jobId);
         
+        // Verify job seeker exists, or find any valid job seeker if the provided ID doesn't exist
+        $jobSeeker = User::where('role_id', 1)->find($jobSeekerId);
+        if (!$jobSeeker) {
+            // If the provided job seeker ID doesn't exist, try to find any job seeker
+            // First try to find one who bookmarked this job
+            $bookmark = JobBookmark::where('job_id', $jobId)
+                ->where('delete_status', 0)
+                ->first();
+            if ($bookmark) {
+                $jobSeeker = User::where('role_id', 1)->find($bookmark->user_id);
+            }
+            // If still no job seeker found, get any job seeker
+            if (!$jobSeeker) {
+                $jobSeeker = User::where('role_id', 1)->first();
+            }
+            // If no job seeker exists at all, abort
+            if (!$jobSeeker) {
+                abort(404, 'No job seeker found');
+            }
+        }
+        
+        // Use the actual job seeker ID (may be different from the one in URL)
+        $actualJobSeekerId = $jobSeeker->id;
+        
         // Get chat thread for this job and job seeker
         // Thread ID format: emp_{employer_id}_user_{job_seeker_id}
         $employerId = $job->user_id;
-        $threadId = 'emp_' . $employerId . '_user_' . $jobSeekerId;
+        $threadId = 'emp_' . $employerId . '_user_' . $actualJobSeekerId;
         
         $messages = Message::where('thread_id', $threadId)
             ->where('message_type', 'chat')
@@ -199,13 +220,13 @@ class JobSeekerController extends Controller
             ->get();
         
         // Check if job is bookmarked by this user
-        $isBookmarked = JobBookmark::where('user_id', $jobSeekerId)
+        $isBookmarked = JobBookmark::where('user_id', $actualJobSeekerId)
             ->where('job_id', $jobId)
             ->where('delete_status', 0)
             ->exists();
         
         // Check if job is applied by this user
-        $isApplied = JobApplicant::where('user_id', $jobSeekerId)
+        $isApplied = JobApplicant::where('user_id', $actualJobSeekerId)
             ->where('job_id', $jobId)
             ->where('status', 1)
             ->exists();
