@@ -21,6 +21,28 @@ use Intervention\Image\Facades\Image;
 class ResumeAppController extends Controller
 {
     /**
+     * Get the correct public path for image uploads
+     * Handles both server deployment and local development
+     * 
+     * @param string $subPath The subdirectory path (e.g., 'assets/user_images/')
+     * @return string The full path to the public directory
+     */
+    private function getPublicUploadPath($subPath = 'assets/user_images/')
+    {
+        // Server deployment path (production)
+        $serverPublicPath = '/home/no47agyrt0nt/public_html/mobile-api/' . $subPath;
+        
+        // Local development path
+        $localPublicPath = public_path($subPath);
+        
+        // Use server path if it exists, otherwise use local path
+        if (file_exists('/home/no47agyrt0nt/public_html/mobile-api/')) {
+            return $serverPublicPath;
+        }
+        
+        return $localPublicPath;
+    }
+    /**
      * return error response.
      *
      * @return \Illuminate\Http\Response
@@ -165,7 +187,16 @@ class ResumeAppController extends Controller
     public function resumeImageUpload(Request $request){
 
         $user_id = auth('sanctum')->user()->id;
-        $savingPath = public_path('assets/user_images/');
+        $savingPath = $this->getPublicUploadPath('assets/user_images/');
+        
+        // Log the base path for debugging
+        Log::info('Image upload started', [
+            'user_id' => $user_id,
+            'public_path' => public_path(),
+            'saving_path' => $savingPath,
+            'saving_path_exists' => file_exists($savingPath),
+            'saving_path_writable' => is_writable($savingPath),
+        ]);
 
         $validator = Validator::make($request->all(), [
             'image_name' => 'required|mimes:png,jpg,jpeg|max:5120', // 5MB max
@@ -195,15 +226,42 @@ class ResumeAppController extends Controller
             // Generate unique filename
             $getImageName = time() . '_' . uniqid() . '.' . $imageName->getClientOriginalExtension();
             
-            // Create user directory if it doesn't exist
-            $newPath = $savingPath . '/' . $user_id;
+            // Ensure parent directory exists with proper permissions
+            if (!file_exists($savingPath)) {
+                if (!mkdir($savingPath, 0755, true)) {
+                    Log::error('Failed to create parent directory: ' . $savingPath);
+                    return $this->sendError('Server error.', ['error' => 'Failed to create upload directory. Please contact support.']);
+                }
+                // Set permissions on parent directory (775 for web server write access)
+                @chmod($savingPath, 0775);
+            } else {
+                // Ensure parent directory is writable
+                if (!is_writable($savingPath)) {
+                    @chmod($savingPath, 0775);
+                }
+            }
+            
+            // Create user directory if it doesn't exist (use DIRECTORY_SEPARATOR for cross-platform compatibility)
+            $newPath = $savingPath . DIRECTORY_SEPARATOR . $user_id;
             if (!file_exists($newPath)) {
-                mkdir($newPath, 0755, true);
+                if (!mkdir($newPath, 0775, true)) {
+                    Log::error('Failed to create user directory: ' . $newPath);
+                    return $this->sendError('Server error.', ['error' => 'Failed to create user directory. Please contact support.']);
+                }
+            } else {
+                // Ensure user directory is writable
+                if (!is_writable($newPath)) {
+                    @chmod($newPath, 0775);
+                    if (!is_writable($newPath)) {
+                        Log::error('User directory is not writable: ' . $newPath);
+                        return $this->sendError('Server error.', ['error' => 'Upload directory is not writable. Please contact support.']);
+                    }
+                }
             }
 
             // Delete old image if exists
-            if($profile->image && file_exists($newPath . '/' . $profile->image)){
-                @unlink($newPath . '/' . $profile->image);
+            if($profile->image && file_exists($newPath . DIRECTORY_SEPARATOR . $profile->image)){
+                @unlink($newPath . DIRECTORY_SEPARATOR . $profile->image);
             }
 
             // Process and save image (200x200 as per UI requirements)
@@ -214,32 +272,74 @@ class ResumeAppController extends Controller
                 $constraint->upsize();
             });
             
-            $upload = $img->save($newPath . '/' . $getImageName, 85); // 85% quality
+            $fullImagePath = $newPath . DIRECTORY_SEPARATOR . $getImageName;
+            $upload = $img->save($fullImagePath, 85); // 85% quality
 
-            if($upload){
+            // Verify file was actually saved
+            if($upload && file_exists($fullImagePath)){
+                // Set file permissions (644 = readable by all, writable by owner)
+                @chmod($fullImagePath, 0644);
+                
+                // Verify file permissions were set correctly
+                $actualPerms = substr(sprintf('%o', fileperms($fullImagePath)), -4);
+                $fileSize = filesize($fullImagePath);
+                $isReadable = is_readable($fullImagePath);
+                
                 // Update profile with new image name
                 $profile->image = $getImageName;
                 $profile->save();
 
-                // Build image URL
-                $imageUrl = url('assets/user_images/' . $user_id . '/' . $getImageName);
+                // Build image URL - use asset() helper for proper URL generation
+                $imageUrl = asset('assets/user_images/' . $user_id . '/' . $getImageName);
+                
+                // Also build the expected URL that mobile app will use
+                $expectedUrl = url('assets/user_images/' . $user_id . '/' . $getImageName);
+                $appUrl = env('APP_URL', 'https://onlinejobs.my/mobile-api');
+                $mobileAppUrl = rtrim($appUrl, '/') . '/assets/user_images/' . $user_id . '/' . $getImageName;
+
+                // Log successful upload for debugging with extensive details
+                Log::info('Image uploaded successfully', [
+                    'user_id' => $user_id,
+                    'profile_id' => $profile->id,
+                    'image_name' => $getImageName,
+                    'file_path' => $fullImagePath,
+                    'file_exists' => file_exists($fullImagePath),
+                    'file_size' => $fileSize,
+                    'file_permissions' => $actualPerms,
+                    'file_readable' => $isReadable,
+                    'image_url_asset' => $imageUrl,
+                    'image_url_url' => $expectedUrl,
+                    'image_url_mobile_app' => $mobileAppUrl,
+                    'public_path' => public_path(),
+                    'app_url_env' => env('APP_URL'),
+                ]);
 
                 $response = [
                     'success' => true,
                     'data' => [
                         'id' => $profile->id,
                         'image' => $getImageName,
+                        'image_name' => $getImageName, // Add image_name for compatibility
                         'image_url' => $imageUrl,
                     ],
                     'message' => 'Image uploaded successfully!',
                 ];
                 return response()->json($response, 200);
             } else {
+                Log::error('Image save failed or file not found after save', [
+                    'user_id' => $user_id,
+                    'file_path' => $fullImagePath,
+                    'save_result' => $upload,
+                    'file_exists' => file_exists($fullImagePath)
+                ]);
                 return $this->sendError('Upload failed.', ['error' => 'Failed to save image. Please try again.']);
             }
 
         } catch (\Exception $e) {
-            Log::error('Image upload error: ' . $e->getMessage());
+            Log::error('Image upload error: ' . $e->getMessage(), [
+                'user_id' => $user_id,
+                'trace' => $e->getTraceAsString()
+            ]);
             return $this->sendError('Server error.', ['error' => $e->getMessage()]);
         }
     }
@@ -247,7 +347,7 @@ class ResumeAppController extends Controller
     public function resumeImageDelete(Request $request){
 
         $user_id = auth('sanctum')->user()->id;
-        $savingPath = public_path('assets/user_images/');
+        $savingPath = $this->getPublicUploadPath('assets/user_images/');
        
         $validator = Validator::make($request->all(), [
             'id' => 'required|integer|min:1|max:999999999999',
